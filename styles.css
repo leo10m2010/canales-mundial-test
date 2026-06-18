@@ -162,6 +162,72 @@ h1 {
   line-height: 1.65;
 }
 
+.mode-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  max-width: 720px;
+  margin-top: 24px;
+  padding: 14px;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid rgba(245, 241, 223, 0.13);
+  border-radius: 24px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.mode-panel p {
+  margin: 0 0 4px;
+  color: var(--signal);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.mode-panel strong {
+  display: block;
+  font-size: 1.22rem;
+  line-height: 1;
+}
+
+.mode-panel span {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.mode-buttons {
+  display: flex;
+  gap: 8px;
+  padding: 5px;
+  background: rgba(245, 241, 223, 0.07);
+  border: 1px solid rgba(245, 241, 223, 0.1);
+  border-radius: 999px;
+}
+
+.mode-button,
+.refresh-button {
+  min-height: 40px;
+  padding: 0 14px;
+  color: var(--ink);
+  background: rgba(0, 0, 0, 0.34);
+  border: 1px solid rgba(245, 241, 223, 0.12);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mode-button.is-active,
+.refresh-button:hover {
+  color: var(--black);
+  background: var(--signal);
+  border-color: var(--signal);
+}
+
 .embed-form {
   position: relative;
   padding: clamp(18px, 3vw, 30px);
@@ -305,6 +371,188 @@ kbd {
   font-weight: 700;
 }
 
+.agenda {
+  margin-bottom: 26px;
+  padding-bottom: 26px;
+  border-bottom: 1px solid rgba(245, 241, 223, 0.14);
+}
+
+.agenda-heading {
+  align-items: center;
+}
+
+.agenda-note {
+  max-width: 760px;
+  margin: -6px 0 16px;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.55;
+}
+
+.agenda-status {
+  margin-bottom: 14px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.agenda-status.is-prominent {
+  padding: 18px;
+  background: rgba(0, 0, 0, 0.24);
+  border: 1px dashed rgba(245, 241, 223, 0.18);
+  border-radius: 20px;
+}
+
+.agenda-status.is-error {
+  color: #ffd6c8;
+  border-color: rgba(255, 107, 53, 0.36);
+}
+
+.agenda-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.match-card {
+  position: relative;
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 16px;
+  background:
+    radial-gradient(circle at 88% 10%, rgba(231, 255, 85, 0.14), transparent 32%),
+    linear-gradient(145deg, rgba(245, 241, 223, 0.075), rgba(0, 0, 0, 0.16));
+  border: 1px solid rgba(245, 241, 223, 0.14);
+  border-radius: 26px;
+  overflow: hidden;
+}
+
+.match-card.is-live {
+  border-color: rgba(255, 107, 53, 0.58);
+  box-shadow: 0 0 0 1px rgba(255, 107, 53, 0.18), 0 24px 70px rgba(255, 107, 53, 0.08);
+}
+
+.match-card.is-finished {
+  opacity: 0.62;
+}
+
+.match-head,
+.match-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.match-league,
+.match-status,
+.match-time,
+.match-date,
+.server-title {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.match-league,
+.match-date,
+.server-title {
+  color: var(--muted);
+}
+
+.match-status,
+.match-time {
+  color: var(--black);
+  background: var(--signal);
+  border-radius: 999px;
+  padding: 6px 9px;
+}
+
+.match-status.live {
+  background: var(--signal-2);
+}
+
+.match-status.finished {
+  color: var(--ink);
+  background: rgba(245, 241, 223, 0.14);
+}
+
+.match-teams {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.team-block {
+  display: grid;
+  gap: 9px;
+  justify-items: center;
+  min-width: 0;
+  text-align: center;
+}
+
+.team-mark {
+  display: grid;
+  width: 66px;
+  height: 66px;
+  place-items: center;
+  color: var(--signal);
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(245, 241, 223, 0.14);
+  border-radius: 20px;
+  font-weight: 800;
+}
+
+.team-mark img {
+  width: 76%;
+  height: 76%;
+  object-fit: contain;
+}
+
+.team-name {
+  color: var(--ink);
+  font-size: clamp(0.92rem, 1.6vw, 1.2rem);
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.versus {
+  color: var(--signal);
+  font-size: 0.78rem;
+  letter-spacing: 0.14em;
+}
+
+.server-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.server-chip {
+  min-height: 38px;
+  padding: 0 11px;
+  color: var(--ink);
+  background: rgba(245, 241, 223, 0.09);
+  border: 1px solid rgba(245, 241, 223, 0.14);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.server-chip:hover,
+.server-chip:focus-visible {
+  color: var(--black);
+  background: var(--signal);
+  border-color: var(--signal);
+}
+
+.server-empty {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
 .preset-groups {
   display: grid;
   gap: 22px;
@@ -333,6 +581,19 @@ kbd {
   background:
     radial-gradient(circle at 12% 0%, rgba(231, 255, 85, 0.14), transparent 22rem),
     rgba(0, 0, 0, 0.18);
+}
+
+.preset-language.is-streamx {
+  padding: 18px;
+  border: 1px solid rgba(25, 201, 255, 0.22);
+  border-radius: 26px;
+  background:
+    radial-gradient(circle at 92% 0%, rgba(25, 201, 255, 0.13), transparent 22rem),
+    rgba(0, 0, 0, 0.16);
+}
+
+.preset-language.is-streamx h2 {
+  color: #9eeaff;
 }
 
 .preset-language.is-worldcup h2 {
@@ -645,11 +906,42 @@ textarea:focus {
   inset: 0;
   z-index: 10;
   display: grid;
+  place-items: stretch;
   background: #000;
 }
 
 .player[hidden] {
   display: none;
+}
+
+.player.is-pc-mode:not(.is-fullscreen) {
+  place-items: center;
+  padding: clamp(14px, 2.8vw, 34px);
+  background:
+    radial-gradient(circle at 20% 20%, rgba(231, 255, 85, 0.12), transparent 30rem),
+    radial-gradient(circle at 82% 10%, rgba(255, 107, 53, 0.14), transparent 28rem),
+    #050605;
+}
+
+.player.is-pc-mode:not(.is-fullscreen) .player-stage {
+  width: min(1460px, calc(100vw - 40px));
+  aspect-ratio: 16 / 9;
+  height: auto;
+  max-height: calc(100vh - 46px);
+  overflow: hidden;
+  border: 1px solid rgba(245, 241, 223, 0.16);
+  border-radius: 28px;
+  box-shadow: 0 35px 110px rgba(0, 0, 0, 0.72), inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+}
+
+.player.is-tv-mode .player-stage,
+.player.is-fullscreen .player-stage {
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .player-stage,
@@ -667,6 +959,76 @@ textarea:focus {
 .player-stage video {
   display: block;
   border: 0;
+}
+
+.tv-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 24px 34px;
+  pointer-events: none;
+  opacity: 0;
+  outline: none;
+  transition: opacity 180ms ease;
+}
+
+.tv-overlay.is-active {
+  pointer-events: auto;
+  opacity: 1;
+}
+
+.tv-overlay span,
+.tv-overlay small {
+  display: block;
+  text-align: center;
+}
+
+.tv-overlay span {
+  width: fit-content;
+  margin: 0 auto 5px;
+  padding: 8px 12px;
+  color: var(--black);
+  background: var(--signal);
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.tv-overlay small {
+  padding: 8px 12px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.64);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  backdrop-filter: blur(14px);
+}
+
+.player.is-fullscreen.is-idle .tv-overlay span,
+.player.is-fullscreen.is-idle .tv-overlay small {
+  opacity: 0;
+}
+
+.player.is-pc-mode:not(.is-fullscreen) .toolbar {
+  top: 24px;
+  right: 50%;
+  flex-direction: row;
+  transform: translateX(50%);
+}
+
+.player.is-pc-mode:not(.is-fullscreen) .toolbar .icon-button::after {
+  top: calc(100% + 10px);
+  right: 50%;
+  transform: translate(50%, -4px);
+}
+
+.player.is-pc-mode:not(.is-fullscreen) .toolbar .icon-button:hover::after {
+  transform: translate(50%, 0);
 }
 
 .toolbar {
@@ -877,6 +1239,11 @@ textarea:focus {
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
+.switcher-group.is-streamx {
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
 .switcher-label {
   flex: 0 0 auto;
   padding: 0 6px;
@@ -931,6 +1298,37 @@ textarea:focus {
   background: rgba(7, 8, 7, 0.14);
 }
 
+body.is-tv-mode button:focus-visible,
+body.is-tv-mode .tv-overlay:focus-visible {
+  outline: 4px solid var(--signal);
+  outline-offset: 5px;
+  box-shadow: 0 0 0 8px rgba(231, 255, 85, 0.14);
+}
+
+body.is-tv-mode .toolbar .icon-button {
+  width: 58px;
+  min-width: 58px;
+  height: 58px;
+  min-height: 58px;
+}
+
+body.is-tv-mode .channel-switcher {
+  width: min(560px, calc(100vw - 48px));
+  padding: 18px;
+}
+
+body.is-tv-mode .channel-switcher button {
+  min-height: 78px;
+  border-radius: 22px;
+  font-size: 0.9rem;
+}
+
+body.is-tv-mode .switcher-header {
+  top: -18px;
+  margin: -18px -18px 0;
+  padding: 20px 18px 14px;
+}
+
 @media (max-width: 860px) {
   .shell {
     padding: 36px 0;
@@ -944,6 +1342,33 @@ textarea:focus {
     min-height: 240px;
   }
 
+  .mode-panel {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .mode-buttons {
+    width: 100%;
+  }
+
+  .mode-button {
+    flex: 1;
+  }
+
+  .agenda-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .match-teams {
+    gap: 8px;
+  }
+
+  .team-mark {
+    width: 56px;
+    height: 56px;
+    border-radius: 17px;
+  }
+
   .toolbar {
     top: auto;
     right: 10px;
@@ -951,6 +1376,24 @@ textarea:focus {
     left: 10px;
     flex-direction: row;
     justify-content: center;
+    transform: none;
+  }
+
+  .player.is-pc-mode:not(.is-fullscreen) {
+    padding: 10px;
+  }
+
+  .player.is-pc-mode:not(.is-fullscreen) .player-stage {
+    width: calc(100vw - 20px);
+    max-height: calc(100vh - 94px);
+    border-radius: 18px;
+  }
+
+  .player.is-pc-mode:not(.is-fullscreen) .toolbar {
+    top: auto;
+    right: 10px;
+    bottom: 10px;
+    left: 10px;
     transform: none;
   }
 
@@ -971,6 +1414,10 @@ textarea:focus {
   }
 
   .toolbar .icon-button::after {
+    display: none;
+  }
+
+  .player.is-pc-mode:not(.is-fullscreen) .toolbar .icon-button::after {
     display: none;
   }
 
