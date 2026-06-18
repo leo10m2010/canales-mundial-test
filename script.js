@@ -11,6 +11,7 @@ const SELECTORS = {
   presetGroups: "#presetGroups",
   channelSwitcher: "#channelSwitcher",
   channelCount: "#channelCount",
+  channelToast: "#channelToast",
 };
 
 const dom = Object.fromEntries(
@@ -29,7 +30,9 @@ const WORLDCUP_CATEGORY = "worldcup";
 const DEFAULT_ALLOW = "autoplay; encrypted-media; fullscreen; picture-in-picture";
 const DEMO_URL = "https://www.youtube.com/embed/dQw4w9WgXcQ";
 const CONTROLS_HIDE_DELAY = 2600;
+const TOAST_HIDE_DELAY = 2400;
 let controlsHideTimer = 0;
+let toastHideTimer = 0;
 
 function getPlayableItems() {
   return CHANNELS.flatMap((channel) => {
@@ -250,7 +253,7 @@ function openItemByOffset(offset) {
   const currentIndex = getCurrentSourceIndex();
   const safeIndex = currentIndex === -1 ? (offset > 0 ? -1 : 0) : currentIndex;
   const nextIndex = (safeIndex + offset + items.length) % items.length;
-  openItem(items[nextIndex], { keepFullscreen: true });
+  openItem(items[nextIndex], { keepFullscreen: true, announce: true });
 }
 
 async function enterFullscreen() {
@@ -288,9 +291,10 @@ async function toggleFullscreen() {
 function syncFullscreenButton() {
   const isFullscreen = Boolean(document.fullscreenElement);
   const label = isFullscreen ? "Salir de pantalla completa" : "Pantalla completa";
+  const title = `${label} (F)`;
 
   dom.fullscreenButton.setAttribute("aria-label", label);
-  dom.fullscreenButton.setAttribute("title", label);
+  dom.fullscreenButton.setAttribute("title", title);
   dom.fullscreenButton.classList.toggle("is-active", isFullscreen);
   dom.player.classList.toggle("is-fullscreen", isFullscreen);
 
@@ -315,6 +319,29 @@ function revealControls() {
       dom.player.classList.add("is-idle");
     }
   }, CONTROLS_HIDE_DELAY);
+}
+
+function showChannelToast(item) {
+  if (!item) {
+    return;
+  }
+
+  const items = getPlayableItems();
+  const itemIndex = items.findIndex((source) => source.sourceUrl === item.sourceUrl);
+  const position = itemIndex === -1 ? "" : `Fuente ${itemIndex + 1}/${items.length} · `;
+
+  window.clearTimeout(toastHideTimer);
+
+  dom.channelToast.replaceChildren();
+  dom.channelToast.append(
+    createElement("strong", "", item.sourceName),
+    createElement("span", "", `${position}${item.sourceName === item.name ? `${item.language} / ${item.quality}` : `${item.name} / ${item.language}`}`)
+  );
+  dom.channelToast.classList.add("is-visible");
+
+  toastHideTimer = window.setTimeout(() => {
+    dom.channelToast.classList.remove("is-visible");
+  }, TOAST_HIDE_DELAY);
 }
 
 async function openPlayer(embed, options = {}) {
@@ -345,6 +372,10 @@ function openItem(item, options = {}) {
   const embed = buildIframe(item.sourceUrl);
   dom.input.value = embed;
   openPlayer(embed, options);
+
+  if (options.announce || !dom.player.hidden) {
+    showChannelToast(item);
+  }
 }
 
 async function closePlayer() {
@@ -357,6 +388,8 @@ async function closePlayer() {
   dom.setupPanel.hidden = false;
   dom.playerStage.replaceChildren();
   dom.player.classList.remove("is-idle", "is-fullscreen");
+  dom.channelToast.classList.remove("is-visible");
+  window.clearTimeout(toastHideTimer);
 }
 
 function bindEvents() {
@@ -384,6 +417,30 @@ function bindEvents() {
 
   document.addEventListener("keydown", (event) => {
     if (dom.player.hidden) {
+      return;
+    }
+
+    if (event.altKey || event.ctrlKey || event.metaKey) {
+      return;
+    }
+
+    if (["c", "C"].includes(event.key)) {
+      event.preventDefault();
+      toggleChannelSwitcher();
+      revealControls();
+      return;
+    }
+
+    if (["f", "F"].includes(event.key)) {
+      event.preventDefault();
+      toggleFullscreen();
+      revealControls();
+      return;
+    }
+
+    if (["e", "E"].includes(event.key)) {
+      event.preventDefault();
+      closePlayer();
       return;
     }
 

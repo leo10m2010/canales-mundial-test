@@ -21,6 +21,15 @@ Si un embed sigue sin cargar, normalmente es porque el sitio bloquea iframes o p
 
 El embed manual acepta URLs directas o iframes con `src`.
 
+## Teclado
+
+- `ArrowRight`, `PageDown` o `N`: siguiente fuente.
+- `ArrowLeft`, `PageUp` o `P`: fuente anterior.
+- `C`: abrir/cerrar canales.
+- `F`: pantalla completa.
+- `E`: cambiar embed / volver al inicio.
+- `Esc`: cerrar panel de canales o salir del player.
+
 ## Netlify
 
 La carpeta ya incluye `netlify.toml`. Sube esta carpeta como sitio estatico y usa `publish = "."`.

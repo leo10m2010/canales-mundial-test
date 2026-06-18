@@ -55,20 +55,21 @@
     <section class="player" id="player" aria-label="Reproductor embed" hidden>
       <div class="player-stage" id="playerStage"></div>
       <div class="channel-switcher" id="channelSwitcher" aria-label="Cambiar canal"></div>
+      <div class="channel-toast" id="channelToast" role="status" aria-live="polite" aria-atomic="true"></div>
       <div class="toolbar" aria-label="Controles del reproductor">
-        <button class="icon-button" type="button" id="channelsButton" aria-label="Canales" aria-expanded="false" title="Canales">
+        <button class="icon-button" type="button" id="channelsButton" aria-label="Canales" aria-expanded="false" title="Canales (C)">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M4 7a2 2 0 1 1 4 0 2 2 0 0 1-4 0Zm6-1h10v2H10V6ZM4 12a2 2 0 1 1 4 0 2 2 0 0 1-4 0Zm6-1h10v2H10v-2Zm-6 6a2 2 0 1 1 4 0 2 2 0 0 1-4 0Zm6-1h10v2H10v-2Z" />
           </svg>
           <span class="sr-only">Canales</span>
         </button>
-        <button class="icon-button" type="button" id="fullscreenButton" aria-label="Pantalla completa" title="Pantalla completa">
+        <button class="icon-button" type="button" id="fullscreenButton" aria-label="Pantalla completa" title="Pantalla completa (F)">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M5 5h6v2H8.41l3.3 3.29-1.42 1.42L7 8.41V11H5V5Zm8 0h6v6h-2V8.41l-3.29 3.3-1.42-1.42L15.59 7H13V5ZM5 13h2v2.59l3.29-3.3 1.42 1.42L8.41 17H11v2H5v-6Zm12 0h2v6h-6v-2h2.59l-3.3-3.29 1.42-1.42 3.29 3.3V13Z" />
           </svg>
           <span class="sr-only">Pantalla completa</span>
         </button>
-        <button class="icon-button" type="button" id="closeButton" aria-label="Cambiar embed" title="Cambiar embed">
+        <button class="icon-button" type="button" id="closeButton" aria-label="Cambiar embed" title="Cambiar embed (E)">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M18.7 3.3a1 1 0 0 0-1.4 0L5.9 14.7 5 19l4.3-.9L20.7 6.7a1 1 0 0 0 0-1.4l-2-2ZM8.3 16.3l-1 .2.2-1L15.6 7.4l.8.8-8.1 8.1ZM4 21h16v-2H4v2Z" />
           </svg>

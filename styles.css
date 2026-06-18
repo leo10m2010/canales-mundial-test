@@ -529,6 +529,46 @@ textarea:focus {
   transform: translate(14px, -50%);
 }
 
+.channel-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  z-index: 12;
+  display: grid;
+  gap: 3px;
+  min-width: min(360px, calc(100vw - 32px));
+  max-width: min(560px, calc(100vw - 32px));
+  padding: 13px 18px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  box-shadow: 0 22px 70px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(16px);
+  opacity: 0;
+  pointer-events: none;
+  text-align: center;
+  transform: translate(-50%, 16px);
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.channel-toast.is-visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.channel-toast strong {
+  font-family: "Courier New", monospace;
+  font-size: 0.9rem;
+  line-height: 1.15;
+}
+
+.channel-toast span {
+  color: var(--muted);
+  font-family: "Courier New", monospace;
+  font-size: 0.72rem;
+}
+
 .toolbar .icon-button {
   all: unset;
   box-sizing: border-box;
@@ -729,6 +769,11 @@ textarea:focus {
 
   .player.is-fullscreen.is-idle .toolbar {
     transform: translateY(18px);
+  }
+
+  .channel-toast {
+    bottom: 72px;
+    border-radius: 22px;
   }
 
   .toolbar .icon-button {
