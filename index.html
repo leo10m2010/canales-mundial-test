@@ -25,7 +25,19 @@
               <p class="preset-title">Canales rapidos</p>
               <h2>Biblioteca en vivo</h2>
             </div>
-            <span class="count-badge" id="channelCount">0 canales</span>
+            <div class="library-tools">
+              <label class="search-box" for="channelSearch">
+                <span>Buscar</span>
+                <input id="channelSearch" type="search" autocomplete="off" placeholder="Canal, pais, opcion..." />
+              </label>
+              <span class="count-badge" id="channelCount">0 canales</span>
+            </div>
+          </div>
+          <div class="key-hints" aria-label="Atajos de teclado">
+            <span><kbd>N</kbd> siguiente</span>
+            <span><kbd>P</kbd> anterior</span>
+            <span><kbd>C</kbd> canales</span>
+            <span><kbd>F</kbd> fullscreen</span>
           </div>
           <div class="preset-groups" id="presetGroups"></div>
         </div>
