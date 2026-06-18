@@ -41,24 +41,36 @@ const STREAMX_CHANNEL_CATEGORY = "streamx-247";
 const STREAMX_EVENT_CATEGORY = "streamx-event";
 const STREAMX_EVENTS_URL = "/.netlify/functions/streamx-events";
 const STREAMX_CHANNELS_URL = "/.netlify/functions/streamx-channels";
+const WORLDCUP_GAMES_URL = "/.netlify/functions/worldcup-games";
 const PERU_TIME_ZONE = "America/Lima";
 const DEFAULT_ALLOW = "autoplay; encrypted-media; fullscreen; picture-in-picture";
 const DEMO_URL = "https://www.youtube.com/embed/dQw4w9WgXcQ";
 const CONTROLS_HIDE_DELAY = 2600;
 const TOAST_HIDE_DELAY = 2400;
 const SOURCE_NAVIGATION_COOLDOWN = 360;
+const SCORE_REFRESH_INTERVAL = 30000;
+const STREAMX_REFRESH_INTERVAL = 120000;
+const CHANNELS_REFRESH_INTERVAL = 600000;
 const PLAYER_MODES = { PC: "pc", TV: "tv" };
 let controlsHideTimer = 0;
 let toastHideTimer = 0;
+let scoreRefreshTimer = 0;
+let streamxRefreshTimer = 0;
+let channelsRefreshTimer = 0;
 let lastSourceNavigationAt = 0;
 let searchTerm = "";
 let streamxEvents = [];
 let streamxChannelItems = [];
+let worldcupGames = [];
 let streamxLoading = false;
+let worldcupLoading = false;
 let streamxError = "";
+let worldcupError = "";
 let currentPlaylist = [];
+let currentPlaylistTitle = "";
 let currentSourceKey = "";
 let tvOverlayLocked = true;
+let tvHomeFocusInitialized = false;
 let playerMode = getInitialPlayerMode();
 
 function getInitialPlayerMode() {
@@ -111,6 +123,11 @@ function setPlayerMode(mode, options = {}) {
   dom.modeToggleButton.setAttribute("title", isTvMode() ? "Cambiar a PC (T)" : "Cambiar a TV (T)");
 
   syncTvOverlay();
+
+  if (isTvMode() && dom.player.hidden) {
+    tvHomeFocusInitialized = false;
+    focusTvHomeFirst();
+  }
 }
 
 async function togglePlayerMode() {
@@ -198,12 +215,15 @@ function getVisibleItems(items) {
 
 async function loadStreamxData(options = {}) {
   streamxLoading = true;
+  worldcupLoading = true;
   streamxError = "";
+  worldcupError = "";
   renderAgenda();
 
-  const [eventsResult, channelsResult] = await Promise.allSettled([
+  const [eventsResult, channelsResult, gamesResult] = await Promise.allSettled([
     fetchJson(STREAMX_EVENTS_URL),
     fetchJson(STREAMX_CHANNELS_URL),
+    fetchJson(WORLDCUP_GAMES_URL),
   ]);
 
   if (eventsResult.status === "fulfilled") {
@@ -220,18 +240,85 @@ async function loadStreamxData(options = {}) {
     streamxError = streamxError || "No se pudieron cargar los canales 24/7.";
   }
 
+  if (gamesResult.status === "fulfilled") {
+    worldcupGames = normalizeWorldcupGames(gamesResult.value);
+  } else {
+    worldcupGames = [];
+    worldcupError = "No se pudo cargar el marcador World Cup.";
+  }
+
   streamxLoading = false;
+  worldcupLoading = false;
   renderAgenda();
   renderChannels();
+  focusTvHomeFirst();
+
+  if (options.announce && !streamxError && !worldcupError) {
+    showChannelToast({
+      sourceName: "Agenda actualizada",
+      name: "Agenda",
+      language: `${buildAgendaEvents().length} partidos`,
+      quality: `${streamxChannelItems.length} canales 24/7`,
+      sourceUrl: getCurrentSource(),
+    });
+  }
+}
+
+async function loadWorldcupGames(options = {}) {
+  worldcupLoading = true;
+  worldcupError = "";
+
+  try {
+    worldcupGames = normalizeWorldcupGames(await fetchJson(WORLDCUP_GAMES_URL));
+  } catch (error) {
+    worldcupError = "No se pudo actualizar el marcador World Cup.";
+  }
+
+  worldcupLoading = false;
+  renderAgenda();
+
+  if (options.announce && !worldcupError) {
+    showChannelToast({
+      sourceName: "Marcador actualizado",
+      name: "World Cup API",
+      language: `${worldcupGames.length} partidos`,
+      quality: hasLiveWorldcupGame() ? "En vivo" : "Agenda",
+      sourceUrl: getCurrentSource(),
+    });
+  }
+}
+
+async function loadStreamxSchedule(options = {}) {
+  streamxLoading = true;
+  streamxError = "";
+
+  try {
+    streamxEvents = normalizeStreamxEvents(await fetchJson(STREAMX_EVENTS_URL));
+  } catch (error) {
+    streamxError = "No se pudo actualizar la agenda Stream-XHD.";
+  }
+
+  streamxLoading = false;
+  renderAgenda();
+  renderChannelSwitcher();
 
   if (options.announce && !streamxError) {
     showChannelToast({
-      sourceName: "Stream-XHD actualizado",
-      name: "Agenda",
-      language: `${streamxEvents.length} partidos`,
-      quality: `${streamxChannelItems.length} canales`,
+      sourceName: "Servidores actualizados",
+      name: "Stream-XHD",
+      language: `${streamxEvents.length} eventos`,
+      quality: "Agenda",
       sourceUrl: getCurrentSource(),
     });
+  }
+}
+
+async function loadStreamxChannels() {
+  try {
+    streamxChannelItems = normalizeStreamxChannels(await fetchJson(STREAMX_CHANNELS_URL));
+    renderChannels();
+  } catch (error) {
+    streamxError = streamxError || "No se pudieron actualizar los canales 24/7.";
   }
 }
 
@@ -295,6 +382,172 @@ function isWorldCupEvent(event, league) {
   ].join(" "));
 
   return text.includes("mundial") || text.includes("copa del mundo") || text.includes("world cup");
+}
+
+function normalizeWorldcupGames(data) {
+  const games = Array.isArray(data) ? data : (data?.games || []);
+
+  return games.map((game) => {
+    const homeTeam = getWorldcupTeamName(game, "home");
+    const awayTeam = getWorldcupTeamName(game, "away");
+    const parsedDate = parseWorldcupDate(game);
+
+    return {
+      ...game,
+      id: String(game.id || game._id || toBase64Id(`${homeTeam}|${awayTeam}|${game.local_date || ""}`)),
+      title: homeTeam && awayTeam ? `${homeTeam} vs ${awayTeam}` : "Partido Mundial",
+      homeTeam,
+      awayTeam,
+      homeScore: parseScore(game.home_score),
+      awayScore: parseScore(game.away_score),
+      parsedDate,
+      matchKey: makeMatchKey(homeTeam, awayTeam),
+    };
+  }).filter((game) => game.homeTeam && game.awayTeam);
+}
+
+function getWorldcupTeamName(game, side) {
+  const prefix = side === "home" ? "home" : "away";
+  return cleanText(game[`${prefix}_team_name_en`] || game[`${prefix}_team_label`] || game[`${prefix}Team`] || "");
+}
+
+function parseScore(value) {
+  const score = Number(value);
+  return Number.isFinite(score) ? score : 0;
+}
+
+function parseWorldcupDate(game) {
+  const value = game.local_date || game.datetime || game.date;
+
+  if (!value) {
+    return null;
+  }
+
+  const text = String(value).trim();
+  const match = text.match(/^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})/);
+
+  if (!match) {
+    const fallback = new Date(text);
+    return Number.isNaN(fallback.getTime()) ? null : fallback;
+  }
+
+  return zonedTimeToDate(
+    Number(match[3]),
+    Number(match[1]),
+    Number(match[2]),
+    Number(match[4]),
+    Number(match[5]),
+    0,
+    PERU_TIME_ZONE
+  );
+}
+
+function makeMatchKey(homeTeam, awayTeam) {
+  return [canonicalTeamName(homeTeam), canonicalTeamName(awayTeam)].sort().join("|");
+}
+
+function canonicalTeamName(value) {
+  const normalized = normalizeText(value)
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+
+  const aliases = {
+    argentina: "argentina",
+    australia: "australia",
+    austria: "austria",
+    belgium: "belgium",
+    belgica: "belgium",
+    bosnia: "bosnia and herzegovina",
+    "bosnia and herzegovina": "bosnia and herzegovina",
+    "bosnia herzegovina": "bosnia and herzegovina",
+    brasil: "brazil",
+    brazil: "brazil",
+    canada: "canada",
+    chile: "chile",
+    colombia: "colombia",
+    croacia: "croatia",
+    croatia: "croatia",
+    curacao: "curacao",
+    ecuador: "ecuador",
+    egypt: "egypt",
+    egipto: "egypt",
+    england: "england",
+    espana: "spain",
+    france: "france",
+    francia: "france",
+    germany: "germany",
+    ghana: "ghana",
+    haiti: "haiti",
+    iran: "iran",
+    iraq: "iraq",
+    japan: "japan",
+    japon: "japan",
+    mexico: "mexico",
+    morocco: "morocco",
+    marruecos: "morocco",
+    netherlands: "netherlands",
+    "paises bajos": "netherlands",
+    paraguay: "paraguay",
+    portugal: "portugal",
+    qatar: "qatar",
+    "republica checa": "czech republic",
+    "czech republic": "czech republic",
+    czechia: "czech republic",
+    "south africa": "south africa",
+    sudafrica: "south africa",
+    "south korea": "south korea",
+    "corea del sur": "south korea",
+    scotland: "scotland",
+    escocia: "scotland",
+    spain: "spain",
+    sweden: "sweden",
+    suecia: "sweden",
+    switzerland: "switzerland",
+    suiza: "switzerland",
+    tunisia: "tunisia",
+    tunez: "tunisia",
+    turkey: "turkey",
+    turquia: "turkey",
+    "united states": "united states",
+    usa: "united states",
+    "estados unidos": "united states",
+    uruguay: "uruguay",
+  };
+
+  return aliases[normalized] || normalized;
+}
+
+function findWorldcupGameForEvent(event) {
+  const key = makeMatchKey(event.homeTeam || "", event.awayTeam || "");
+
+  if (key !== "|") {
+    const direct = worldcupGames.find((game) => game.matchKey === key);
+
+    if (direct) {
+      return direct;
+    }
+  }
+
+  const eventDate = event.parsedDate || parseStreamxDate(event);
+
+  if (!eventDate) {
+    return null;
+  }
+
+  return worldcupGames.find((game) => {
+    if (!game.parsedDate) {
+      return false;
+    }
+
+    const minutes = Math.abs(game.parsedDate.getTime() - eventDate.getTime()) / 60000;
+    const sameSide = canonicalTeamName(game.homeTeam).includes(canonicalTeamName(event.homeTeam)) || canonicalTeamName(event.homeTeam).includes(canonicalTeamName(game.homeTeam));
+    return minutes <= 180 && sameSide;
+  }) || null;
+}
+
+function findStreamxEventForGame(game) {
+  return streamxEvents.find((event) => makeMatchKey(event.homeTeam || "", event.awayTeam || "") === game.matchKey) || null;
 }
 
 function normalizeStreamxChannels(data) {
@@ -379,30 +632,129 @@ function normalizeStreamxLanguage(item) {
   return "Español";
 }
 
+function buildAgendaEvents() {
+  const matchedGames = new Set();
+  const events = streamxEvents.map((event) => {
+    const game = findWorldcupGameForEvent(event);
+
+    if (game) {
+      matchedGames.add(game.id);
+    }
+
+    return buildAgendaEvent(event, game);
+  });
+
+  worldcupGames.forEach((game) => {
+    if (matchedGames.has(game.id) || !shouldShowWorldcupFallback(game)) {
+      return;
+    }
+
+    events.push(buildAgendaEvent(findStreamxEventForGame(game), game));
+  });
+
+  return events.sort(sortAgendaEvents);
+}
+
+function buildAgendaEvent(streamEvent, game) {
+  const source = streamEvent || {};
+  const title = source.title || game?.title || makeTitleFromTeams(source) || "Partido Mundial";
+  const parsedDate = source.parsedDate || game?.parsedDate || parseStreamxDate(source);
+  const event = {
+    ...source,
+    id: source.id || (game ? `worldcup-${game.id}` : toBase64Id(title)),
+    title,
+    homeTeam: source.homeTeam || game?.homeTeam || "Local",
+    awayTeam: source.awayTeam || game?.awayTeam || "Visitante",
+    homeLogo: source.homeLogo || "",
+    awayLogo: source.awayLogo || "",
+    leagueName: source.leagueName || source.league || "Copa Del Mundo 2026",
+    parsedDate,
+    duration: Number(source.duration || 130),
+    extraTime: Number(source.extraTime || 0),
+    worldcupGame: game || null,
+  };
+
+  event.servers = Array.isArray(source.servers) ? source.servers : [];
+  event.serverItems = getEventServerItems(event);
+  event.statusInfo = getAgendaStatus(event);
+  return event;
+}
+
+function shouldShowWorldcupFallback(game) {
+  const status = getWorldcupGameStatus(game);
+
+  if (status.key === "live") {
+    return true;
+  }
+
+  if (!game.parsedDate) {
+    return false;
+  }
+
+  const hoursFromNow = (game.parsedDate.getTime() - Date.now()) / 3600000;
+
+  if (status.key === "finished") {
+    return hoursFromNow >= -48 && hoursFromNow <= 12;
+  }
+
+  return hoursFromNow >= -6 && hoursFromNow <= 168;
+}
+
+function sortAgendaEvents(a, b) {
+  const statusRank = { live: 0, upcoming: 1, finished: 2 };
+  const rankDiff = statusRank[a.statusInfo.key] - statusRank[b.statusInfo.key];
+
+  if (rankDiff) {
+    return rankDiff;
+  }
+
+  return (a.parsedDate?.getTime() || Number.MAX_SAFE_INTEGER) - (b.parsedDate?.getTime() || Number.MAX_SAFE_INTEGER);
+}
+
 function renderAgenda() {
+  const agendaEvents = buildAgendaEvents();
+  const activeFocusKey = document.activeElement?.dataset?.tvFocusKey || "";
+
   dom.agendaGrid.replaceChildren();
-  dom.agendaCount.textContent = `${streamxEvents.length} partidos`;
+  dom.agendaCount.textContent = `${agendaEvents.length} partidos`;
 
-  if (streamxLoading) {
-    setAgendaStatus("Cargando agenda Stream-XHD...", false, true);
+  if (streamxLoading || worldcupLoading) {
+    setAgendaStatus("Cargando agenda, servidores y marcador...", false, true);
     return;
   }
 
-  if (streamxError && !streamxEvents.length) {
-    setAgendaStatus(`${streamxError} En Netlify funcionara mediante proxy; en servidor local simple puede no estar disponible.`, true, true);
+  if ((streamxError || worldcupError) && !agendaEvents.length) {
+    setAgendaStatus(`${streamxError || worldcupError} En Netlify funcionara mediante proxy; en servidor local simple puede no estar disponible.`, true, true);
     return;
   }
 
-  if (!streamxEvents.length) {
+  if (!agendaEvents.length) {
     setAgendaStatus("No hay partidos Mundial 2026 disponibles ahora mismo.", false, true);
     return;
   }
 
-  setAgendaStatus(streamxError || "Agenda cargada. Selecciona un servidor para abrirlo en el player.", Boolean(streamxError), false);
+  const statusParts = [];
 
-  streamxEvents.forEach((event) => {
+  if (worldcupError) {
+    statusParts.push(worldcupError);
+  } else {
+    statusParts.push("Marcador World Cup activo");
+  }
+
+  if (streamxError) {
+    statusParts.push(streamxError);
+  } else {
+    statusParts.push("servidores Stream-XHD activos");
+  }
+
+  statusParts.push("auto-refresh: marcador 30s, servidores 2min");
+  setAgendaStatus(statusParts.join(" · "), Boolean(streamxError || worldcupError), false);
+
+  agendaEvents.forEach((event) => {
     dom.agendaGrid.append(createAgendaCard(event));
   });
+
+  restoreTvHomeFocus(activeFocusKey);
 }
 
 function setAgendaStatus(message, isError, isProminent) {
@@ -412,34 +764,192 @@ function setAgendaStatus(message, isError, isProminent) {
 }
 
 function createAgendaCard(event) {
-  const status = getStreamxStatus(event);
-  const servers = getEventServerItems(event);
+  const status = event.statusInfo || getAgendaStatus(event);
+  const servers = event.serverItems || getEventServerItems(event);
+  const playlistTitle = `Servidores de ${event.title}`;
   const card = createElement("article", `match-card is-${status.key}`);
   const head = createElement("div", "match-head");
   const league = createElement("span", "match-league", event.leagueName || "Mundial 2026");
   const statusPill = createElement("span", `match-status ${status.key}`, status.label);
   const teams = createElement("div", "match-teams");
+  const scoreBlock = createElement("div", "score-block");
+  const score = createElement("strong", "match-score", formatAgendaScore(event));
+  const scoreLabel = createElement("span", "score-label", formatAgendaScoreLabel(event));
   const meta = createElement("div", "match-meta");
-  const serverLabel = createElement("div", "server-title", servers.length ? `${servers.length} servidores disponibles` : "Servidor pendiente");
+  const detail = createElement("div", "match-detail", formatAgendaDetail(event));
+  const serverLabel = createElement("div", "server-title", servers.length ? `${servers.length} canales disponibles` : "Canales pendientes");
   const serverList = createElement("div", "server-list");
 
   head.append(league, statusPill);
-  teams.append(createTeamBlock(event.homeTeam || "Local", event.homeLogo), createElement("strong", "versus", "VS"), createTeamBlock(event.awayTeam || "Visitante", event.awayLogo));
-  meta.append(createElement("span", "match-time", formatStreamxTime(event)), createElement("span", "match-date", formatStreamxDate(event)));
+  scoreBlock.append(score, scoreLabel);
+  teams.append(createTeamBlock(event.homeTeam || "Local", event.homeLogo), scoreBlock, createTeamBlock(event.awayTeam || "Visitante", event.awayLogo));
+  meta.append(createElement("span", "match-time", formatAgendaTime(event)), createElement("span", "match-date", formatAgendaDate(event)));
 
   if (servers.length) {
+    const watchButton = createElement("button", "watch-button", "Ver primer canal");
+    watchButton.type = "button";
+    watchButton.dataset.tvFocusKey = `watch:${event.id}`;
+    watchButton.addEventListener("click", () => openItem(servers[0], { playlist: servers, playlistTitle }));
+    serverList.append(watchButton);
+
     servers.forEach((serverItem) => {
       const button = createElement("button", "server-chip", serverItem.sourceName);
       button.type = "button";
-      button.addEventListener("click", () => openItem(serverItem, { playlist: servers }));
+      button.dataset.tvFocusKey = getItemKey(serverItem);
+      button.addEventListener("click", () => openItem(serverItem, { playlist: servers, playlistTitle }));
       serverList.append(button);
     });
   } else {
-    serverList.append(createElement("span", "server-empty", "Stream pendiente"));
+    const pending = createElement("button", "watch-button is-disabled", "Canales pendientes");
+    pending.type = "button";
+    pending.dataset.tvFocusKey = `pending:${event.id}`;
+    pending.disabled = true;
+    serverList.append(pending);
   }
 
-  card.append(head, teams, meta, serverLabel, serverList);
+  card.append(head, teams, meta, detail, serverLabel, serverList);
   return card;
+}
+
+function getAgendaStatus(event) {
+  if (event.worldcupGame) {
+    return getWorldcupGameStatus(event.worldcupGame);
+  }
+
+  return getStreamxStatus(event);
+}
+
+function getWorldcupGameStatus(game) {
+  const finished = normalizeText(game.finished) === "true" || normalizeText(game.time_elapsed) === "finished";
+  const elapsed = normalizeText(game.time_elapsed);
+
+  if (finished) {
+    return { key: "finished", label: "FINALIZADO" };
+  }
+
+  if (elapsed.includes("live") || elapsed.includes("playing")) {
+    return { key: "live", label: "EN VIVO" };
+  }
+
+  return { key: "upcoming", label: "PRONTO" };
+}
+
+function formatAgendaScore(event) {
+  const game = event.worldcupGame;
+
+  if (!game) {
+    return "VS";
+  }
+
+  const status = getWorldcupGameStatus(game);
+
+  if (status.key === "upcoming" && !game.homeScore && !game.awayScore) {
+    return "VS";
+  }
+
+  return `${game.homeScore} - ${game.awayScore}`;
+}
+
+function formatAgendaScoreLabel(event) {
+  if (!event.worldcupGame) {
+    return "sin marcador API";
+  }
+
+  const status = getWorldcupGameStatus(event.worldcupGame);
+
+  if (status.key === "finished") {
+    return "resultado final";
+  }
+
+  if (status.key === "live") {
+    return normalizeText(event.worldcupGame.time_elapsed) === "live" ? "marcador en vivo" : event.worldcupGame.time_elapsed;
+  }
+
+  return "marcador API";
+}
+
+function formatAgendaDetail(event) {
+  const game = event.worldcupGame;
+  const status = event.statusInfo || getAgendaStatus(event);
+
+  if (game && status.key === "finished") {
+    return `Acabo ${formatAgendaEndTime(event)} aprox. · API World Cup`;
+  }
+
+  if (game && status.key === "live") {
+    const elapsed = cleanText(game.time_elapsed || "live");
+    return `${elapsed === "live" ? "Partido en vivo" : elapsed} · API World Cup`;
+  }
+
+  if (game) {
+    return `Programado · API World Cup`;
+  }
+
+  return `Horario desde Stream-XHD`;
+}
+
+function formatAgendaEndTime(event) {
+  const start = event.parsedDate || event.worldcupGame?.parsedDate;
+
+  if (!start) {
+    return "hora pendiente";
+  }
+
+  const duration = Number(event.duration || 130) + Number(event.extraTime || 0);
+  const end = new Date(start.getTime() + duration * 60000);
+
+  return new Intl.DateTimeFormat("es-PE", {
+    timeZone: PERU_TIME_ZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(end);
+}
+
+function formatAgendaTime(event) {
+  const date = event.parsedDate || event.worldcupGame?.parsedDate;
+
+  if (!date) {
+    return "Horario pendiente";
+  }
+
+  return new Intl.DateTimeFormat("es-PE", {
+    timeZone: PERU_TIME_ZONE,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date);
+}
+
+function formatAgendaDate(event) {
+  const date = event.parsedDate || event.worldcupGame?.parsedDate;
+
+  if (!date) {
+    return "Hora Peru";
+  }
+
+  return `${new Intl.DateTimeFormat("es-PE", {
+    timeZone: PERU_TIME_ZONE,
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+  }).format(date)} · Hora Peru`;
+}
+
+function hasLiveWorldcupGame() {
+  return worldcupGames.some((game) => getWorldcupGameStatus(game).key === "live");
+}
+
+function restoreTvHomeFocus(activeFocusKey) {
+  if (!activeFocusKey || !isTvMode() || !dom.player.hidden) {
+    return;
+  }
+
+  window.setTimeout(() => {
+    const target = Array.from(document.querySelectorAll("[data-tv-focus-key]"))
+      .find((element) => element.dataset.tvFocusKey === activeFocusKey);
+    target?.focus({ preventScroll: true });
+  }, 0);
 }
 
 function createTeamBlock(name, logo) {
@@ -723,7 +1233,7 @@ function createSourceIcon(item) {
   const icon = createElement("span", "source-icon");
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-  const isWorldCup = item.category === WORLDCUP_CATEGORY;
+  const isWorldCup = item.category === WORLDCUP_CATEGORY || item.category === STREAMX_EVENT_CATEGORY;
 
   svg.setAttribute("viewBox", "0 0 24 24");
   svg.setAttribute("aria-hidden", "true");
@@ -740,7 +1250,7 @@ function createSourceIcon(item) {
   return icon;
 }
 
-function createChannelButton(item) {
+function createChannelButton(item, playlist = null, playlistTitle = "") {
   const button = document.createElement("button");
   button.type = "button";
   button.dataset.src = item.sourceUrl;
@@ -759,18 +1269,22 @@ function createChannelButton(item) {
   }
 
   button.append(top, meta);
-  button.addEventListener("click", () => openItem(item, { playlist: getPlayableItems() }));
+  button.addEventListener("click", () => openItem(item, {
+    playlist: playlist || getPlayableItems(),
+    playlistTitle: playlistTitle || "Biblioteca en vivo",
+    keepPlaylist: Boolean(playlist),
+  }));
   return button;
 }
 
-function createItemsSection(title, items, compact = false, modifier = "") {
+function createItemsSection(title, items, compact = false, modifier = "", playlist = null) {
   const sectionClass = compact ? "switcher-group" : "preset-language";
   const section = createElement("section", `${sectionClass}${modifier ? ` ${modifier}` : ""}`);
 
   section.append(createElement(compact ? "span" : "h2", compact ? "switcher-label" : "", title));
 
   const list = compact ? section : createElement("div", "preset-grid");
-  items.forEach((item) => list.append(createChannelButton(item)));
+  items.forEach((item) => list.append(createChannelButton(item, playlist, title)));
 
   if (!compact) {
     section.append(list);
@@ -791,25 +1305,13 @@ function renderChannels() {
   const streamxItems = getVisibleItems(getStreamxChannelItems());
   dom.channelCount.textContent = searchTerm ? `${visibleItems.length}/${items.length} fuentes` : `${items.length} fuentes`;
   dom.presetGroups.replaceChildren();
-  dom.channelSwitcher.replaceChildren();
-
-  const switcherHeader = createElement("div", "switcher-header");
-  const switcherTitle = createElement("div");
-  switcherTitle.append(
-    createElement("strong", "", "Canales"),
-    createElement("span", "", `${visibleItems.length} fuentes visibles`)
-  );
-  switcherHeader.append(switcherTitle);
-  dom.channelSwitcher.append(switcherHeader);
 
   if (worldCupItems.length) {
     dom.presetGroups.append(createItemsSection("Mundial 2026", worldCupItems, false, "is-worldcup"));
-    dom.channelSwitcher.append(createItemsSection("Mundial 2026", worldCupItems, true, "is-worldcup"));
   }
 
   if (streamxItems.length) {
     dom.presetGroups.append(createItemsSection("Stream-XHD 24/7", streamxItems, false, "is-streamx"));
-    dom.channelSwitcher.append(createItemsSection("Stream-XHD 24/7", streamxItems, true, "is-streamx"));
   }
 
   LANGUAGES.forEach((language) => {
@@ -817,7 +1319,6 @@ function renderChannels() {
 
     if (languageItems.length) {
       dom.presetGroups.append(createItemsSection(language, languageItems));
-      dom.channelSwitcher.append(createItemsSection(language, languageItems, true));
     }
   });
 
@@ -829,6 +1330,52 @@ function renderChannels() {
     );
     dom.presetGroups.append(emptyState);
   }
+
+  renderChannelSwitcher();
+}
+
+function renderChannelSwitcher() {
+  const items = getPlayableItems();
+  const visibleItems = getVisibleItems(items);
+  const worldCupItems = getVisibleItems(getWorldCupItems());
+  const streamxItems = getVisibleItems(getStreamxChannelItems());
+  const regularItems = getVisibleItems(getRegularItems());
+  const headerSubtitle = currentPlaylist.length
+    ? `${currentPlaylist.length} canales del partido`
+    : `${visibleItems.length} fuentes visibles`;
+
+  dom.channelSwitcher.replaceChildren();
+
+  const switcherHeader = createElement("div", "switcher-header");
+  const switcherTitle = createElement("div");
+  switcherTitle.append(
+    createElement("strong", "", currentPlaylist.length ? "Canales disponibles" : "Canales"),
+    createElement("span", "", headerSubtitle)
+  );
+  switcherHeader.append(switcherTitle);
+  dom.channelSwitcher.append(switcherHeader);
+
+  if (currentPlaylist.length) {
+    dom.channelSwitcher.append(createItemsSection(currentPlaylistTitle || "Servidores del partido", currentPlaylist, true, "is-event", currentPlaylist));
+  }
+
+  if (streamxItems.length) {
+    dom.channelSwitcher.append(createItemsSection("Stream-XHD 24/7", streamxItems, true, "is-streamx"));
+  }
+
+  if (worldCupItems.length) {
+    dom.channelSwitcher.append(createItemsSection("Mundial 2026", worldCupItems, true, "is-worldcup"));
+  }
+
+  LANGUAGES.forEach((language) => {
+    const languageItems = regularItems.filter((item) => item.language === language);
+
+    if (languageItems.length) {
+      dom.channelSwitcher.append(createItemsSection(language, languageItems, true));
+    }
+  });
+
+  updateActiveChannel(getCurrentSource(), currentSourceKey);
 }
 
 function toggleChannelSwitcher(force, options = {}) {
@@ -1088,9 +1635,13 @@ async function openPlayer(embed, options = {}) {
 function openItem(item, options = {}) {
   if (Array.isArray(options.playlist)) {
     currentPlaylist = options.playlist.filter((source) => source && source.sourceUrl);
+    currentPlaylistTitle = options.playlistTitle || currentPlaylistTitle || "Canales disponibles";
   } else if (!options.keepPlaylist) {
     currentPlaylist = getPlayableItems();
+    currentPlaylistTitle = options.playlistTitle || "Biblioteca en vivo";
   }
+
+  renderChannelSwitcher();
 
   const embed = buildIframe(item.sourceUrl);
   dom.input.value = embed;
@@ -1113,7 +1664,9 @@ async function closePlayer() {
   dom.player.classList.remove("is-idle", "is-fullscreen");
   dom.channelToast.classList.remove("is-visible");
   currentPlaylist = [];
+  currentPlaylistTitle = "";
   currentSourceKey = "";
+  renderChannelSwitcher();
   syncTvOverlay();
   window.clearTimeout(toastHideTimer);
 }
@@ -1154,6 +1707,85 @@ function moveSwitcherFocus(direction) {
     : (currentIndex + direction + buttons.length) % buttons.length;
 
   buttons[nextIndex].focus({ preventScroll: false });
+}
+
+function getTvHomeFocusables() {
+  return Array.from(document.querySelectorAll([
+    ".agenda button:not(:disabled)",
+    ".mode-button",
+    ".refresh-button",
+    ".preset-grid button",
+    ".custom-embed summary",
+  ].join(","))).filter((element) => {
+    const rect = element.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  });
+}
+
+function focusTvHomeFirst() {
+  if (!isTvMode() || !dom.player.hidden || tvHomeFocusInitialized) {
+    return;
+  }
+
+  window.setTimeout(() => {
+    const target = document.querySelector(".watch-button:not(:disabled)")
+      || document.querySelector(".server-chip:not(:disabled)")
+      || document.querySelector(".preset-grid button")
+      || document.querySelector(".mode-button.is-active");
+
+    if (target) {
+      tvHomeFocusInitialized = true;
+      target.focus({ preventScroll: false });
+      target.scrollIntoView({ block: "center", inline: "nearest" });
+    }
+  }, 0);
+}
+
+function moveTvHomeFocus(direction) {
+  const focusables = getTvHomeFocusables();
+
+  if (!focusables.length) {
+    return;
+  }
+
+  const currentIndex = focusables.indexOf(document.activeElement);
+  const nextIndex = currentIndex === -1
+    ? 0
+    : (currentIndex + direction + focusables.length) % focusables.length;
+
+  focusables[nextIndex].focus({ preventScroll: false });
+  focusables[nextIndex].scrollIntoView({ block: "center", inline: "nearest" });
+}
+
+function startAutoRefresh() {
+  window.clearInterval(scoreRefreshTimer);
+  window.clearInterval(streamxRefreshTimer);
+  window.clearInterval(channelsRefreshTimer);
+
+  scoreRefreshTimer = window.setInterval(() => {
+    if (!document.hidden) {
+      loadWorldcupGames();
+    }
+  }, SCORE_REFRESH_INTERVAL);
+
+  streamxRefreshTimer = window.setInterval(() => {
+    if (!document.hidden) {
+      loadStreamxSchedule();
+    }
+  }, STREAMX_REFRESH_INTERVAL);
+
+  channelsRefreshTimer = window.setInterval(() => {
+    if (!document.hidden) {
+      loadStreamxChannels();
+    }
+  }, CHANNELS_REFRESH_INTERVAL);
+
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) {
+      loadWorldcupGames();
+      loadStreamxSchedule();
+    }
+  });
 }
 
 function bindEvents() {
@@ -1235,6 +1867,18 @@ function bindEvents() {
     }
 
     if (dom.player.hidden) {
+      if (isTvMode() && ["ArrowRight", "ArrowDown"].includes(event.key)) {
+        event.preventDefault();
+        moveTvHomeFocus(1);
+        return;
+      }
+
+      if (isTvMode() && ["ArrowLeft", "ArrowUp"].includes(event.key)) {
+        event.preventDefault();
+        moveTvHomeFocus(-1);
+        return;
+      }
+
       return;
     }
 
@@ -1310,3 +1954,4 @@ renderChannels();
 bindEvents();
 syncFullscreenButton();
 loadStreamxData();
+startAutoRefresh();

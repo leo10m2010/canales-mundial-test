@@ -436,6 +436,11 @@ kbd {
   opacity: 0.62;
 }
 
+.match-card:focus-within {
+  border-color: rgba(231, 255, 85, 0.58);
+  box-shadow: 0 0 0 4px rgba(231, 255, 85, 0.08), 0 24px 70px rgba(0, 0, 0, 0.28);
+}
+
 .match-head,
 .match-meta {
   display: flex;
@@ -524,13 +529,46 @@ kbd {
   letter-spacing: 0.14em;
 }
 
+.score-block {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  min-width: 88px;
+  padding: 10px 12px;
+  color: var(--black);
+  background: var(--signal);
+  border-radius: 20px;
+  box-shadow: 0 16px 44px rgba(231, 255, 85, 0.16);
+}
+
+.match-score {
+  font-size: clamp(1.25rem, 2.8vw, 2.1rem);
+  line-height: 0.95;
+  letter-spacing: -0.08em;
+}
+
+.score-label {
+  font-size: 0.54rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+.match-detail {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
 .server-list {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
 
-.server-chip {
+.server-chip,
+.watch-button {
   min-height: 38px;
   padding: 0 11px;
   color: var(--ink);
@@ -541,8 +579,25 @@ kbd {
   font-weight: 800;
 }
 
+.watch-button {
+  color: var(--black);
+  background: var(--signal);
+  border-color: var(--signal);
+  padding: 0 15px;
+}
+
+.watch-button.is-disabled,
+.watch-button:disabled {
+  color: rgba(245, 241, 223, 0.48);
+  background: rgba(245, 241, 223, 0.08);
+  border-color: rgba(245, 241, 223, 0.12);
+  cursor: not-allowed;
+}
+
 .server-chip:hover,
-.server-chip:focus-visible {
+.server-chip:focus-visible,
+.watch-button:hover,
+.watch-button:focus-visible {
   color: var(--black);
   background: var(--signal);
   border-color: var(--signal);
@@ -1244,6 +1299,15 @@ textarea:focus {
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
+.switcher-group.is-event {
+  padding: 12px;
+  border: 1px solid rgba(231, 255, 85, 0.22);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(231, 255, 85, 0.12), transparent 40%),
+    rgba(231, 255, 85, 0.055);
+}
+
 .switcher-label {
   flex: 0 0 auto;
   padding: 0 6px;
@@ -1327,6 +1391,60 @@ body.is-tv-mode .switcher-header {
   top: -18px;
   margin: -18px -18px 0;
   padding: 20px 18px 14px;
+}
+
+body.is-tv-mode .shell {
+  width: min(1380px, calc(100vw - 48px));
+  gap: 18px;
+  padding: 28px 0 48px;
+}
+
+body.is-tv-mode .hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 0.42fr);
+  gap: 20px;
+  align-items: end;
+}
+
+body.is-tv-mode h1 {
+  font-size: clamp(2.4rem, 5.8vw, 5rem);
+}
+
+body.is-tv-mode .intro {
+  max-width: 820px;
+  margin-top: 14px;
+}
+
+body.is-tv-mode .mode-panel {
+  margin-top: 0;
+}
+
+body.is-tv-mode .embed-form {
+  padding: clamp(16px, 2.2vw, 24px);
+}
+
+body.is-tv-mode .custom-embed {
+  display: none;
+}
+
+body.is-tv-mode .agenda-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+body.is-tv-mode .match-card {
+  padding: 18px;
+  border-radius: 30px;
+}
+
+body.is-tv-mode .watch-button,
+body.is-tv-mode .server-chip {
+  min-height: 48px;
+  padding: 0 16px;
+  font-size: 0.82rem;
+}
+
+body.is-tv-mode .watch-button {
+  min-width: 180px;
 }
 
 @media (max-width: 860px) {
