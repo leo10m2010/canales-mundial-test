@@ -519,6 +519,14 @@ textarea:focus {
   background: rgba(0, 0, 0, 0.48);
   backdrop-filter: blur(16px);
   transform: translateY(-50%);
+  opacity: 1;
+  transition: opacity 220ms ease, transform 220ms ease;
+}
+
+.player.is-fullscreen.is-idle .toolbar {
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(14px, -50%);
 }
 
 .toolbar .icon-button {
@@ -717,6 +725,10 @@ textarea:focus {
     flex-direction: row;
     justify-content: center;
     transform: none;
+  }
+
+  .player.is-fullscreen.is-idle .toolbar {
+    transform: translateY(18px);
   }
 
   .toolbar .icon-button {

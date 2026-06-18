@@ -28,6 +28,8 @@ const LANGUAGES = ["Español", "English"];
 const WORLDCUP_CATEGORY = "worldcup";
 const DEFAULT_ALLOW = "autoplay; encrypted-media; fullscreen; picture-in-picture";
 const DEMO_URL = "https://www.youtube.com/embed/dQw4w9WgXcQ";
+const CONTROLS_HIDE_DELAY = 2600;
+let controlsHideTimer = 0;
 
 function getPlayableItems() {
   return CHANNELS.flatMap((channel) => {
@@ -228,7 +230,42 @@ function updateActiveChannel(src) {
   });
 }
 
-async function requestFullscreen() {
+function getCurrentSource() {
+  const frame = dom.playerStage.querySelector("iframe");
+  return frame?.getAttribute("src") || "";
+}
+
+function getCurrentSourceIndex() {
+  const currentSource = getCurrentSource();
+  return getPlayableItems().findIndex((item) => item.sourceUrl === currentSource);
+}
+
+function openItemByOffset(offset) {
+  const items = getPlayableItems();
+
+  if (!items.length) {
+    return;
+  }
+
+  const currentIndex = getCurrentSourceIndex();
+  const safeIndex = currentIndex === -1 ? (offset > 0 ? -1 : 0) : currentIndex;
+  const nextIndex = (safeIndex + offset + items.length) % items.length;
+  openItem(items[nextIndex], { keepFullscreen: true });
+}
+
+async function enterFullscreen() {
+  if (document.fullscreenElement || !dom.player.requestFullscreen) {
+    return;
+  }
+
+  try {
+    await dom.player.requestFullscreen();
+  } catch (error) {
+    // Browsers can reject fullscreen unless the user gesture is direct.
+  }
+}
+
+async function toggleFullscreen() {
   if (document.fullscreenElement) {
     if (document.exitFullscreen) {
       await document.exitFullscreen();
@@ -255,9 +292,32 @@ function syncFullscreenButton() {
   dom.fullscreenButton.setAttribute("aria-label", label);
   dom.fullscreenButton.setAttribute("title", label);
   dom.fullscreenButton.classList.toggle("is-active", isFullscreen);
+  dom.player.classList.toggle("is-fullscreen", isFullscreen);
+
+  if (isFullscreen) {
+    revealControls();
+  } else {
+    window.clearTimeout(controlsHideTimer);
+    dom.player.classList.remove("is-idle");
+  }
 }
 
-async function openPlayer(embed) {
+function revealControls() {
+  dom.player.classList.remove("is-idle");
+  window.clearTimeout(controlsHideTimer);
+
+  if (!document.fullscreenElement || dom.channelSwitcher.classList.contains("is-open")) {
+    return;
+  }
+
+  controlsHideTimer = window.setTimeout(() => {
+    if (document.fullscreenElement && !dom.channelSwitcher.classList.contains("is-open")) {
+      dom.player.classList.add("is-idle");
+    }
+  }, CONTROLS_HIDE_DELAY);
+}
+
+async function openPlayer(embed, options = {}) {
   const normalizedEmbed = normalizeEmbed(embed);
 
   if (!normalizedEmbed) {
@@ -273,13 +333,18 @@ async function openPlayer(embed) {
   toggleChannelSwitcher(false);
   dom.setupPanel.hidden = true;
   dom.player.hidden = false;
-  await requestFullscreen();
+
+  if (!options.keepFullscreen) {
+    await enterFullscreen();
+  }
+
+  revealControls();
 }
 
-function openItem(item) {
+function openItem(item, options = {}) {
   const embed = buildIframe(item.sourceUrl);
   dom.input.value = embed;
-  openPlayer(embed);
+  openPlayer(embed, options);
 }
 
 async function closePlayer() {
@@ -291,6 +356,7 @@ async function closePlayer() {
   dom.player.hidden = true;
   dom.setupPanel.hidden = false;
   dom.playerStage.replaceChildren();
+  dom.player.classList.remove("is-idle", "is-fullscreen");
 }
 
 function bindEvents() {
@@ -305,22 +371,45 @@ function bindEvents() {
     openPlayer(embed);
   });
 
-  dom.fullscreenButton.addEventListener("click", requestFullscreen);
+  dom.fullscreenButton.addEventListener("click", toggleFullscreen);
   dom.closeButton.addEventListener("click", closePlayer);
-  dom.channelsButton.addEventListener("click", () => toggleChannelSwitcher());
+  dom.channelsButton.addEventListener("click", () => {
+    toggleChannelSwitcher();
+    revealControls();
+  });
+  dom.player.addEventListener("pointermove", revealControls);
+  dom.player.addEventListener("pointerdown", revealControls);
+  dom.player.addEventListener("touchstart", revealControls, { passive: true });
   document.addEventListener("fullscreenchange", syncFullscreenButton);
 
   document.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape" || dom.player.hidden) {
+    if (dom.player.hidden) {
       return;
     }
 
-    if (dom.channelSwitcher.classList.contains("is-open")) {
-      toggleChannelSwitcher(false);
+    if (["ArrowRight", "PageDown", "n", "N"].includes(event.key)) {
+      event.preventDefault();
+      openItemByOffset(1);
+      revealControls();
       return;
     }
 
-    closePlayer();
+    if (["ArrowLeft", "PageUp", "p", "P"].includes(event.key)) {
+      event.preventDefault();
+      openItemByOffset(-1);
+      revealControls();
+      return;
+    }
+
+    if (event.key === "Escape") {
+      if (dom.channelSwitcher.classList.contains("is-open")) {
+        toggleChannelSwitcher(false);
+        revealControls();
+        return;
+      }
+
+      closePlayer();
+    }
   });
 }
 
