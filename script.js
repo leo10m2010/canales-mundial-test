@@ -102,11 +102,16 @@ const REMOTE_ACTION_BY_CODE = {
 };
 const REMOTE_ACTION_BY_KEY_CODE = {
   4: "back",
+  13: "ok",
   19: "up",
   20: "down",
   21: "left",
   22: "right",
   23: "ok",
+  37: "left",
+  38: "up",
+  39: "right",
+  40: "down",
   66: "ok",
   82: "menu",
   85: "playPause",
@@ -118,6 +123,7 @@ const REMOTE_ACTION_BY_KEY_CODE = {
   160: "ok",
   166: "channelUp",
   167: "channelDown",
+  461: "back",
 };
 const REMOTE_TV_ACTIVATION_KEY_CODES = new Set([4, 19, 20, 21, 22, 23, 66, 82, 87, 88, 92, 93, 111, 160, 166, 167]);
 const REMOTE_TV_ACTIVATION_KEYS = new Set(["Accept", "Select", "GoBack", "BrowserBack", "ChannelUp", "ChannelDown", "MediaTrackNext", "MediaTrackPrevious"]);
@@ -138,6 +144,7 @@ let worldcupLoading = false;
 let streamxError = "";
 let channelsError = "";
 let worldcupError = "";
+let streamxDataLoading = false;
 let selectedAgendaDate = "";
 let lastWorldcupLoadedAt = 0;
 let lastStreamxLoadedAt = 0;
@@ -149,6 +156,7 @@ let tvOverlayLocked = true;
 let tvHomeFocusInitialized = false;
 let playerHistoryActive = false;
 let ignoreNextPopState = false;
+let playerReturnFocusElement = null;
 let playerMode = getInitialPlayerMode();
 
 function getInitialPlayerMode() {
@@ -158,7 +166,7 @@ function getInitialPlayerMode() {
     return queryMode;
   }
 
-  const savedMode = window.localStorage.getItem("playerMode");
+  const savedMode = safeStorageGet("playerMode");
 
   if (savedMode === PLAYER_MODES.TV || savedMode === PLAYER_MODES.PC) {
     return savedMode;
@@ -186,8 +194,28 @@ function isLargeLandscapeDisplay() {
   return largeScreen && landscape;
 }
 
+function isCompactViewport() {
+  return Boolean(window.matchMedia?.("(max-width: 860px)")?.matches) || window.innerWidth <= 860;
+}
+
 function isTvMode() {
   return playerMode === PLAYER_MODES.TV;
+}
+
+function safeStorageGet(key) {
+  try {
+    return window.localStorage.getItem(key);
+  } catch (error) {
+    return null;
+  }
+}
+
+function safeStorageSet(key, value) {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch (error) {
+    // Storage can be blocked in some embedded TV browsers.
+  }
 }
 
 function getEventKeyCode(event) {
@@ -250,7 +278,7 @@ function setPlayerMode(mode, options = {}) {
   playerMode = mode === PLAYER_MODES.TV ? PLAYER_MODES.TV : PLAYER_MODES.PC;
 
   if (options.persist !== false) {
-    window.localStorage.setItem("playerMode", playerMode);
+    safeStorageSet("playerMode", playerMode);
   }
 
   document.body.classList.toggle("is-tv-mode", isTvMode());
@@ -260,6 +288,7 @@ function setPlayerMode(mode, options = {}) {
 
   document.querySelectorAll("[data-player-mode]").forEach((button) => {
     button.classList.toggle("is-active", button.dataset.playerMode === playerMode);
+    button.setAttribute("aria-pressed", String(button.dataset.playerMode === playerMode));
   });
 
   dom.modeLabel.textContent = isTvMode() ? "TV" : "PC";
@@ -268,7 +297,8 @@ function setPlayerMode(mode, options = {}) {
     : "Reproduccion sin fullscreen automatico y con iframe libre.";
 
   dom.modeToggleButton.classList.toggle("is-active", isTvMode());
-  dom.modeToggleButton.setAttribute("aria-label", isTvMode() ? "Modo PC" : "Modo TV");
+  dom.modeToggleButton.setAttribute("aria-pressed", String(isTvMode()));
+  dom.modeToggleButton.setAttribute("aria-label", "Modo TV");
   dom.modeToggleButton.setAttribute("title", isTvMode() ? "Cambiar a PC (T)" : "Cambiar a TV (T)");
 
   syncTvOverlay();
@@ -363,23 +393,41 @@ function getVisibleItems(items) {
 }
 
 async function loadStreamxData(options = {}) {
-  await Promise.allSettled([
-    loadStreamxSchedule({ forceRefresh: options.forceRefresh }),
-    loadStreamxChannels({ forceRefresh: options.forceRefresh }),
-    loadWorldcupGames({ forceRefresh: options.forceRefresh }),
-  ]);
-
-  focusTvHomeFirst();
-
-  if (options.announce && !streamxError && !channelsError && !worldcupError) {
-    showChannelToast({
-      sourceName: "Agenda actualizada",
-      name: "Agenda",
-      language: `${buildAgendaEvents().length} partidos`,
-      quality: `${streamxChannelItems.length} canales 24/7`,
-      sourceUrl: getCurrentSource(),
-    });
+  if (streamxDataLoading) {
+    return;
   }
+
+  streamxDataLoading = true;
+  setRefreshButtonLoading(true);
+
+  try {
+    await Promise.allSettled([
+      loadStreamxSchedule({ forceRefresh: options.forceRefresh }),
+      loadStreamxChannels({ forceRefresh: options.forceRefresh }),
+      loadWorldcupGames({ forceRefresh: options.forceRefresh }),
+    ]);
+
+    focusTvHomeFirst();
+
+    if (options.announce && !streamxError && !channelsError && !worldcupError) {
+      showChannelToast({
+        sourceName: "Agenda actualizada",
+        name: "Agenda",
+        language: `${buildAgendaEvents().length} partidos`,
+        quality: `${streamxChannelItems.length} canales 24/7`,
+        sourceUrl: getCurrentSource(),
+      });
+    }
+  } finally {
+    streamxDataLoading = false;
+    setRefreshButtonLoading(false);
+  }
+}
+
+function setRefreshButtonLoading(isLoading) {
+  dom.refreshStreamxButton.disabled = isLoading;
+  dom.refreshStreamxButton.setAttribute("aria-busy", String(isLoading));
+  dom.refreshStreamxButton.textContent = isLoading ? "Actualizando..." : "Actualizar agenda";
 }
 
 async function loadWorldcupGames(options = {}) {
@@ -735,12 +783,13 @@ function normalizeStreamxChannels(data) {
       const stream = cleanText(channel.stream || channel.codigo || channel.code || channel.id || extractStreamCode(channel.url));
       const url = cleanText(channel.url || (stream ? `https://stream-xhd.com/live1.php?stream=${encodeURIComponent(stream)}` : ""));
       const name = cleanText(channel.name || channel.nombre || channel.title || `Canal ${index + 1}`);
+      const stableKey = stream || extractStreamCode(url) || url || name || String(index);
 
       return {
         name,
         sourceName: name,
         sourceUrl: url,
-        sourceKey: `streamx-channel:${index}`,
+        sourceKey: `streamx-channel:${toBase64Id(stableKey).slice(0, 64)}`,
         language: normalizeStreamxLanguage(channel),
         country: countryToFlagCode(channel.country || channel.pais || channel.category || channel.categoria),
         quality: cleanText(channel.quality || channel.calidad || "720p"),
@@ -1476,8 +1525,8 @@ function extractIframeSrc(value) {
   return match ? match[2] : "";
 }
 
-function buildIframe(src) {
-  return `<iframe src="${escapeAttribute(src)}" width="100%" height="100%" frameborder="0" scrolling="no" allow="${DEFAULT_ALLOW}"></iframe>`;
+function buildIframe(src, title = "Player embed") {
+  return `<iframe src="${escapeAttribute(src)}" title="${escapeAttribute(title)}" width="100%" height="100%" frameborder="0" scrolling="no" allow="${DEFAULT_ALLOW}" allowfullscreen></iframe>`;
 }
 
 function normalizeEmbed(value) {
@@ -1515,8 +1564,9 @@ function prepareEmbeds(container) {
     );
 
     frame.setAttribute("allow", Array.from(permissions).join("; "));
+    frame.setAttribute("title", frame.getAttribute("title") || "Player embed");
+    frame.setAttribute("allowfullscreen", "true");
     frame.removeAttribute("sandbox");
-    frame.removeAttribute("allowfullscreen");
   });
 }
 
@@ -1699,30 +1749,56 @@ function renderChannelSwitcher() {
   });
 
   updateActiveChannel(getCurrentSource(), currentSourceKey);
+  syncChannelSwitcherAccessibility();
 }
 
 function toggleChannelSwitcher(force, options = {}) {
+  const activeElement = document.activeElement;
   const isOpen = typeof force === "boolean"
     ? dom.channelSwitcher.classList.toggle("is-open", force)
     : dom.channelSwitcher.classList.toggle("is-open");
 
   dom.channelsButton.setAttribute("aria-expanded", String(isOpen));
+  syncChannelSwitcherAccessibility(isOpen);
 
-  if (isOpen && options.focus) {
+  if (isOpen && (options.focus || isCompactViewport())) {
     focusActiveSwitcherItem();
   }
 
   if (!isOpen && isTvMode()) {
     focusTvOverlay();
+  } else if (!isOpen && activeElement instanceof HTMLElement && dom.channelSwitcher.contains(activeElement)) {
+    dom.channelsButton.focus({ preventScroll: true });
   }
 
   return isOpen;
 }
 
+function syncChannelSwitcherAccessibility(isOpen = dom.channelSwitcher.classList.contains("is-open")) {
+  dom.channelSwitcher.setAttribute("aria-hidden", String(!isOpen));
+
+  if ("inert" in dom.channelSwitcher) {
+    dom.channelSwitcher.inert = !isOpen;
+  }
+
+  dom.channelSwitcher.toggleAttribute("inert", !isOpen);
+  dom.channelSwitcher.querySelectorAll("button").forEach((button) => {
+    if (isOpen) {
+      button.removeAttribute("tabindex");
+    } else {
+      button.tabIndex = -1;
+    }
+  });
+}
+
 function focusActiveSwitcherItem() {
+  if (!dom.channelSwitcher.classList.contains("is-open")) {
+    return;
+  }
+
   window.setTimeout(() => {
-    const target = dom.channelSwitcher.querySelector("button.is-active") || dom.channelSwitcher.querySelector("button");
-    target?.focus({ preventScroll: false });
+    const target = dom.channelSwitcher.querySelector("button.is-active") || dom.channelSwitcher.querySelector("button") || dom.channelSwitcher;
+    target.focus({ preventScroll: false });
   }, 0);
 }
 
@@ -1733,6 +1809,12 @@ function updateActiveChannel(src, sourceKey = "") {
       : button.dataset.src === src;
 
     button.classList.toggle("is-active", isActive);
+
+    if (isActive) {
+      button.setAttribute("aria-current", "true");
+    } else {
+      button.removeAttribute("aria-current");
+    }
   });
 }
 
@@ -1928,6 +2010,23 @@ function showChannelToast(item) {
   }, TOAST_HIDE_DELAY);
 }
 
+function rememberPlayerReturnFocus() {
+  if (!dom.player.hidden || !(document.activeElement instanceof HTMLElement)) {
+    return;
+  }
+
+  playerReturnFocusElement = document.activeElement;
+}
+
+function restorePlayerReturnFocus() {
+  const target = playerReturnFocusElement;
+  playerReturnFocusElement = null;
+
+  if (target && document.contains(target) && isElementVisible(target)) {
+    window.setTimeout(() => target.focus({ preventScroll: false }), 0);
+  }
+}
+
 function pushPlayerHistoryState() {
   if (playerHistoryActive || !window.history?.pushState) {
     return;
@@ -1981,6 +2080,8 @@ async function openPlayer(embed, options = {}) {
     return;
   }
 
+  rememberPlayerReturnFocus();
+
   const wrapper = document.createElement("div");
   wrapper.innerHTML = normalizedEmbed;
   prepareEmbeds(wrapper);
@@ -2003,7 +2104,12 @@ async function openPlayer(embed, options = {}) {
     await enterFullscreen();
   }
 
-  focusTvOverlay();
+  if (isTvMode()) {
+    focusTvOverlay();
+  } else {
+    window.setTimeout(() => dom.closeButton.focus({ preventScroll: true }), 0);
+  }
+
   revealControls();
 }
 
@@ -2018,7 +2124,7 @@ function openItem(item, options = {}) {
 
   renderChannelSwitcher();
 
-  const embed = buildIframe(item.sourceUrl);
+  const embed = buildIframe(item.sourceUrl, `${item.sourceName} - ${item.name || "Player"}`);
   dom.input.value = embed;
   openPlayer(embed, { ...options, sourceKey: getItemKey(item) });
 
@@ -2045,6 +2151,7 @@ async function closePlayer(options = {}) {
   syncTvOverlay();
   window.clearTimeout(toastHideTimer);
   syncPlayerHistoryAfterClose(options);
+  restorePlayerReturnFocus();
 }
 
 async function handleBackNavigation() {
@@ -2096,15 +2203,21 @@ function focusElement(element) {
   element.scrollIntoView({ block: "nearest", inline: "nearest" });
 }
 
+function rangesOverlap(startA, endA, startB, endB) {
+  return Math.max(startA, startB) <= Math.min(endA, endB);
+}
+
 function findSpatialTarget(elements, current, direction) {
   if (!current || !elements.includes(current)) {
     return elements[0] || null;
   }
 
+  const currentRect = current.getBoundingClientRect();
   const currentCenter = getElementCenter(current);
   const candidates = elements
     .filter((element) => element !== current)
     .map((element) => {
+      const rect = element.getBoundingClientRect();
       const center = getElementCenter(element);
       const dx = center.x - currentCenter.x;
       const dy = center.y - currentCenter.y;
@@ -2113,11 +2226,15 @@ function findSpatialTarget(elements, current, direction) {
           : direction === "down" ? dy
             : -dy;
       const secondary = direction === "right" || direction === "left" ? Math.abs(dy) : Math.abs(dx);
+      const aligned = direction === "right" || direction === "left"
+        ? rangesOverlap(currentRect.top, currentRect.bottom, rect.top, rect.bottom)
+        : rangesOverlap(currentRect.left, currentRect.right, rect.left, rect.right);
+      const score = (aligned ? 0 : 10000) + primary + secondary * (aligned ? 0.25 : 2.5);
 
-      return { element, primary, secondary };
+      return { element, primary, secondary, aligned, score };
     })
     .filter((candidate) => candidate.primary > 4)
-    .sort((a, b) => (a.primary * 1000 + a.secondary) - (b.primary * 1000 + b.secondary));
+    .sort((a, b) => a.score - b.score);
 
   return candidates[0]?.element || null;
 }
@@ -2129,8 +2246,11 @@ function moveSpatialFocus(elements, direction) {
     return;
   }
 
-  const target = findSpatialTarget(visibleElements, document.activeElement, direction) || visibleElements[0];
-  focusElement(target);
+  const target = findSpatialTarget(visibleElements, document.activeElement, direction);
+
+  if (target) {
+    focusElement(target);
+  }
 }
 
 function clickFocusedButton() {
@@ -2155,16 +2275,12 @@ function moveSwitcherFocus(direction) {
 }
 
 function getTvHomeFocusables() {
-  return Array.from(document.querySelectorAll([
+  return Array.from(new Set(Array.from(document.querySelectorAll([
     ".agenda button:not(:disabled)",
     ".mode-button",
-    ".refresh-button",
     ".preset-grid button",
     ".custom-embed summary",
-  ].join(","))).filter((element) => {
-    const rect = element.getBoundingClientRect();
-    return rect.width > 0 && rect.height > 0;
-  });
+  ].join(","))))).filter(isElementVisible);
 }
 
 function focusTvHomeFirst() {
@@ -2407,7 +2523,7 @@ function bindEvents() {
   });
 
   dom.demoButton.addEventListener("click", () => {
-    const embed = buildIframe(DEMO_URL);
+    const embed = buildIframe(DEMO_URL, "Demo player");
     dom.input.value = embed;
     openPlayer(embed);
   });

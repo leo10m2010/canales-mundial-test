@@ -1,12 +1,33 @@
 {
   "name": "Player Embed",
   "short_name": "Player",
-  "start_url": "./?mode=tv",
+  "start_url": "./",
   "scope": "./",
-  "display": "fullscreen",
+  "display": "standalone",
   "background_color": "#000000",
   "theme_color": "#070807",
-  "orientation": "landscape",
   "lang": "es",
-  "categories": ["entertainment", "sports"]
+  "categories": ["entertainment", "sports"],
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Abrir en modo TV",
+      "short_name": "Modo TV",
+      "url": "./?mode=tv",
+      "icons": [
+        {
+          "src": "icon.svg",
+          "sizes": "any",
+          "type": "image/svg+xml"
+        }
+      ]
+    }
+  ]
 }

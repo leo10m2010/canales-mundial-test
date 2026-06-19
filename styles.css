@@ -48,6 +48,11 @@
   --signal-2: #ff6b35;
   --black: #070807;
   --shadow: 0 30px 90px rgba(0, 0, 0, 0.55);
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --tap-min: 44px;
 }
 
 * {
@@ -57,6 +62,7 @@
 html,
 body {
   min-height: 100%;
+  min-height: 100dvh;
 }
 
 body {
@@ -113,6 +119,7 @@ textarea:focus-visible {
 .shell {
   width: min(1180px, calc(100vw - 32px));
   min-height: 100vh;
+  min-height: 100dvh;
   margin: 0 auto;
   display: grid;
   gap: 24px;
@@ -209,7 +216,7 @@ h1 {
 
 .mode-button,
 .refresh-button {
-  min-height: 40px;
+  min-height: var(--tap-min);
   padding: 0 14px;
   color: var(--ink);
   background: rgba(0, 0, 0, 0.34);
@@ -221,11 +228,17 @@ h1 {
   text-transform: uppercase;
 }
 
-.mode-button.is-active,
-.refresh-button:hover {
+.mode-button.is-active {
   color: var(--black);
   background: var(--signal);
   border-color: var(--signal);
+}
+
+.refresh-button:disabled {
+  color: rgba(245, 241, 223, 0.52);
+  background: rgba(245, 241, 223, 0.08);
+  border-color: rgba(245, 241, 223, 0.12);
+  cursor: wait;
 }
 
 .embed-form {
@@ -296,7 +309,7 @@ label {
 
 .search-box input {
   width: 100%;
-  min-height: 42px;
+  min-height: var(--tap-min);
   padding: 0 14px;
   color: var(--ink);
   background: rgba(0, 0, 0, 0.34);
@@ -456,7 +469,6 @@ kbd {
 }
 
 .agenda-date-button.is-active,
-.agenda-date-button:hover,
 .agenda-date-button:focus-visible {
   color: var(--black);
   background: var(--signal);
@@ -464,7 +476,6 @@ kbd {
 }
 
 .agenda-date-button.is-active span,
-.agenda-date-button:hover span,
 .agenda-date-button:focus-visible span {
   color: rgba(7, 8, 7, 0.68);
 }
@@ -631,7 +642,7 @@ kbd {
 
 .server-chip,
 .watch-button {
-  min-height: 38px;
+  min-height: var(--tap-min);
   padding: 0 11px;
   color: var(--ink);
   background: rgba(245, 241, 223, 0.09);
@@ -656,9 +667,7 @@ kbd {
   cursor: not-allowed;
 }
 
-.server-chip:hover,
 .server-chip:focus-visible,
-.watch-button:hover,
 .watch-button:focus-visible {
   color: var(--black);
   background: var(--signal);
@@ -941,20 +950,7 @@ kbd {
   font-size: 0.68rem;
 }
 
-.preset-grid button:hover {
-  transform: translateY(-2px);
-  border-color: rgba(231, 255, 85, 0.58);
-  background: linear-gradient(135deg, rgba(231, 255, 85, 0.24), rgba(245, 241, 223, 0.08));
-  box-shadow: 0 20px 44px rgba(0, 0, 0, 0.28);
-}
-
-.preset-grid button:hover::after {
-  opacity: 1;
-  transform: translateY(0);
-}
-
-.preset-grid button.is-active .pill,
-.preset-grid button:hover .pill {
+.preset-grid button.is-active .pill {
   background: rgba(7, 8, 7, 0.14);
 }
 
@@ -1005,12 +1001,6 @@ textarea:focus {
   border: 1px solid var(--line);
 }
 
-.primary:hover,
-.secondary:hover {
-  transform: translateY(-2px);
-  filter: brightness(1.08);
-}
-
 .hint {
   margin: 16px 0 0;
   color: var(--muted);
@@ -1045,6 +1035,7 @@ textarea:focus {
   aspect-ratio: 16 / 9;
   height: auto;
   max-height: calc(100vh - 46px);
+  max-height: calc(100dvh - 46px - var(--safe-top) - var(--safe-bottom));
   overflow: hidden;
   border: 1px solid rgba(245, 241, 223, 0.16);
   border-radius: 28px;
@@ -1086,7 +1077,7 @@ textarea:focus {
   flex-direction: column;
   align-items: center;
   justify-content: flex-end;
-  padding: 0 24px 34px;
+  padding: 0 calc(24px + var(--safe-right)) calc(34px + var(--safe-bottom)) calc(24px + var(--safe-left));
   pointer-events: none;
   opacity: 0;
   outline: none;
@@ -1144,14 +1135,10 @@ textarea:focus {
   transform: translate(50%, -4px);
 }
 
-.player.is-pc-mode:not(.is-fullscreen) .toolbar .icon-button:hover::after {
-  transform: translate(50%, 0);
-}
-
 .toolbar {
   position: fixed;
   top: 50%;
-  right: 18px;
+  right: calc(18px + var(--safe-right));
   z-index: 11;
   display: flex;
   flex-direction: column;
@@ -1175,7 +1162,7 @@ textarea:focus {
 .channel-toast {
   position: fixed;
   left: 50%;
-  bottom: 28px;
+  bottom: calc(28px + var(--safe-bottom));
   z-index: 12;
   display: grid;
   gap: 3px;
@@ -1257,11 +1244,6 @@ textarea:focus {
   outline-offset: 3px;
 }
 
-.toolbar .icon-button:hover {
-  transform: translateY(-2px);
-  filter: brightness(1.08);
-}
-
 .toolbar .icon-button svg {
   position: absolute;
   top: 50%;
@@ -1300,16 +1282,11 @@ textarea:focus {
   transition: opacity 160ms ease, transform 160ms ease;
 }
 
-.toolbar .icon-button:hover::after {
-  opacity: 1;
-  transform: translate(0, -50%);
-}
-
 .channel-switcher {
   position: fixed;
-  top: 18px;
-  right: 84px;
-  bottom: 18px;
+  top: calc(18px + var(--safe-top));
+  right: calc(84px + var(--safe-right));
+  bottom: calc(18px + var(--safe-bottom));
   z-index: 11;
   display: grid;
   width: min(420px, calc(100vw - 36px));
@@ -1431,18 +1408,88 @@ textarea:focus {
   border-radius: 10px;
 }
 
-.channel-switcher button:hover,
 .channel-switcher button.is-active {
   color: var(--black);
   background: var(--signal);
   border-color: var(--signal);
-  transform: translateY(-2px);
 }
 
-.channel-switcher button:hover .pill,
 .channel-switcher button.is-active .pill {
   color: rgba(7, 8, 7, 0.72);
   background: rgba(7, 8, 7, 0.14);
+}
+
+@media (hover: hover) {
+  .refresh-button:not(:disabled):hover {
+    color: var(--black);
+    background: var(--signal);
+    border-color: var(--signal);
+  }
+
+  .agenda-date-button:hover {
+    color: var(--black);
+    background: var(--signal);
+    border-color: var(--signal);
+  }
+
+  .agenda-date-button:hover span {
+    color: rgba(7, 8, 7, 0.68);
+  }
+
+  .server-chip:not(:disabled):hover,
+  .watch-button:not(:disabled):hover {
+    color: var(--black);
+    background: var(--signal);
+    border-color: var(--signal);
+  }
+
+  .preset-grid button:hover {
+    transform: translateY(-2px);
+    border-color: rgba(231, 255, 85, 0.58);
+    background: linear-gradient(135deg, rgba(231, 255, 85, 0.24), rgba(245, 241, 223, 0.08));
+    box-shadow: 0 20px 44px rgba(0, 0, 0, 0.28);
+  }
+
+  .preset-grid button:hover::after {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .preset-grid button:hover .pill {
+    background: rgba(7, 8, 7, 0.14);
+  }
+
+  .primary:hover,
+  .secondary:hover {
+    transform: translateY(-2px);
+    filter: brightness(1.08);
+  }
+
+  .toolbar .icon-button:hover {
+    transform: translateY(-2px);
+    filter: brightness(1.08);
+  }
+
+  .toolbar .icon-button:hover::after {
+    opacity: 1;
+    transform: translate(0, -50%);
+  }
+
+  .player.is-pc-mode:not(.is-fullscreen) .toolbar .icon-button:hover::after {
+    transform: translate(50%, 0);
+  }
+
+  .channel-switcher button:hover {
+    color: var(--black);
+    background: var(--signal);
+    border-color: var(--signal);
+    transform: translateY(-2px);
+  }
+
+  .channel-switcher button:hover .pill {
+    color: rgba(7, 8, 7, 0.72);
+    background: rgba(7, 8, 7, 0.14);
+  }
 }
 
 body.is-tv-mode button:focus-visible,
@@ -1537,7 +1584,8 @@ body.is-tv-mode .watch-button {
 
 @media (max-width: 860px) {
   .shell {
-    padding: 36px 0;
+    width: min(1180px, calc(100vw - 24px - var(--safe-left) - var(--safe-right)));
+    padding: calc(32px + var(--safe-top)) 0 calc(34px + var(--safe-bottom));
   }
 
   .hero::after {
@@ -1577,29 +1625,30 @@ body.is-tv-mode .watch-button {
 
   .toolbar {
     top: auto;
-    right: 10px;
-    bottom: 10px;
-    left: 10px;
+    right: calc(10px + var(--safe-right));
+    bottom: calc(10px + var(--safe-bottom));
+    left: calc(10px + var(--safe-left));
     flex-direction: row;
     justify-content: center;
     transform: none;
   }
 
   .player.is-pc-mode:not(.is-fullscreen) {
-    padding: 10px;
+    padding: calc(10px + var(--safe-top)) calc(10px + var(--safe-right)) calc(74px + var(--safe-bottom)) calc(10px + var(--safe-left));
   }
 
   .player.is-pc-mode:not(.is-fullscreen) .player-stage {
-    width: calc(100vw - 20px);
-    max-height: calc(100vh - 94px);
+    width: calc(100vw - 20px - var(--safe-left) - var(--safe-right));
+    max-height: calc(100vh - 104px);
+    max-height: calc(100dvh - 104px - var(--safe-top) - var(--safe-bottom));
     border-radius: 18px;
   }
 
   .player.is-pc-mode:not(.is-fullscreen) .toolbar {
     top: auto;
-    right: 10px;
-    bottom: 10px;
-    left: 10px;
+    right: calc(10px + var(--safe-right));
+    bottom: calc(10px + var(--safe-bottom));
+    left: calc(10px + var(--safe-left));
     transform: none;
   }
 
@@ -1608,8 +1657,17 @@ body.is-tv-mode .watch-button {
   }
 
   .channel-toast {
-    bottom: 72px;
+    right: calc(10px + var(--safe-right));
+    bottom: calc(76px + var(--safe-bottom));
+    left: calc(10px + var(--safe-left));
+    min-width: 0;
+    max-width: none;
     border-radius: 22px;
+    transform: translateY(16px);
+  }
+
+  .channel-toast.is-visible {
+    transform: translateY(0);
   }
 
   .toolbar .icon-button {
@@ -1629,11 +1687,12 @@ body.is-tv-mode .watch-button {
 
   .channel-switcher {
     top: auto;
-    right: 10px;
-    bottom: 72px;
-    left: 10px;
+    right: calc(10px + var(--safe-right));
+    bottom: calc(76px + var(--safe-bottom));
+    left: calc(10px + var(--safe-left));
     width: auto;
-    max-height: 48vh;
+    max-height: min(70vh, calc(100vh - 104px));
+    max-height: min(70dvh, calc(100dvh - 104px - var(--safe-top) - var(--safe-bottom)));
     border-radius: 22px;
     transform: translateY(calc(100% + 90px));
   }
@@ -1663,6 +1722,51 @@ body.is-tv-mode .watch-button {
   .search-box {
     width: 100%;
   }
+
+  body.is-tv-mode .shell {
+    width: min(1380px, calc(100vw - 24px - var(--safe-left) - var(--safe-right)));
+    padding: calc(32px + var(--safe-top)) 0 calc(34px + var(--safe-bottom));
+  }
+
+  body.is-tv-mode .hero,
+  body.is-tv-mode .agenda-grid {
+    grid-template-columns: 1fr;
+  }
+
+  body.is-tv-mode .toolbar .icon-button {
+    width: 46px;
+    min-width: 46px;
+    height: 46px;
+    min-height: 46px;
+  }
+
+  body.is-tv-mode .channel-switcher {
+    right: calc(10px + var(--safe-right));
+    bottom: calc(76px + var(--safe-bottom));
+    left: calc(10px + var(--safe-left));
+    width: auto;
+    padding: 14px;
+  }
+
+  body.is-tv-mode .channel-switcher button {
+    min-height: 64px;
+    border-radius: 18px;
+    font-size: 0.78rem;
+  }
+
+  body.is-tv-mode .switcher-header {
+    top: -14px;
+    margin: -14px -14px 0;
+    padding: 16px 14px 12px;
+  }
+
+  body.is-tv-mode .agenda-date-button {
+    min-height: 52px;
+  }
+
+  body.is-tv-mode .watch-button {
+    min-width: 0;
+  }
 }
 
 @media (min-width: 861px) and (max-width: 1120px) {
@@ -1672,5 +1776,16 @@ body.is-tv-mode .watch-button {
 
   .is-worldcup .preset-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
   }
 }

@@ -2,13 +2,13 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#070807" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Player Embed" />
     <title>Player Embed</title>
-    <link rel="icon" href="data:," />
+    <link rel="icon" href="icon.svg" type="image/svg+xml" />
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="stylesheet" href="styles.css" />
   </head>
@@ -104,14 +104,14 @@
 
     <section class="player" id="player" aria-label="Reproductor embed" hidden>
       <div class="player-stage" id="playerStage"></div>
-      <div class="tv-overlay" id="tvOverlay" tabindex="-1" aria-label="Control remoto TV">
+      <div class="tv-overlay" id="tvOverlay" tabindex="-1" role="button" aria-label="Abrir canales con control remoto TV" aria-haspopup="dialog">
         <span>Control TV activo</span>
         <small>Izq/Der cambian fuente · OK/Menu abre canales · Back vuelve</small>
       </div>
-      <div class="channel-switcher" id="channelSwitcher" aria-label="Cambiar canal"></div>
+      <div class="channel-switcher" id="channelSwitcher" role="dialog" tabindex="-1" aria-label="Cambiar canal" aria-hidden="true"></div>
       <div class="channel-toast" id="channelToast" role="status" aria-live="polite" aria-atomic="true"></div>
       <div class="toolbar" aria-label="Controles del reproductor">
-        <button class="icon-button" type="button" id="channelsButton" aria-label="Canales" aria-expanded="false" title="Canales (C)">
+        <button class="icon-button" type="button" id="channelsButton" aria-label="Canales" aria-expanded="false" aria-controls="channelSwitcher" title="Canales (C)">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M4 7a2 2 0 1 1 4 0 2 2 0 0 1-4 0Zm6-1h10v2H10V6ZM4 12a2 2 0 1 1 4 0 2 2 0 0 1-4 0Zm6-1h10v2H10v-2Zm-6 6a2 2 0 1 1 4 0 2 2 0 0 1-4 0Zm6-1h10v2H10v-2Z" />
           </svg>

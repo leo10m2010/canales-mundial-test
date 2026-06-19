@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Player Embed">
+  <rect width="512" height="512" rx="112" fill="#070807"/>
+  <circle cx="408" cy="104" r="74" fill="#e7ff55" opacity="0.18"/>
+  <path fill="#e7ff55" d="M116 146h280a34 34 0 0 1 34 34v168a34 34 0 0 1-34 34H116a34 34 0 0 1-34-34V180a34 34 0 0 1 34-34Zm24 58v120h232V204H140Z"/>
+  <path fill="#070807" d="m235 232 74 38-74 38v-76Z"/>
+  <path fill="#ff6b35" d="M154 414h204v32H154z"/>
+</svg>
