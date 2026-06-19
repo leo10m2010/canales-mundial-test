@@ -140,6 +140,7 @@ textarea:focus-visible {
   border: 1px solid var(--line);
   border-radius: 50%;
   box-shadow: inset 0 0 0 18px rgba(231, 255, 85, 0.07);
+  pointer-events: none;
 }
 
 .eyebrow {
@@ -170,6 +171,8 @@ h1 {
 }
 
 .mode-panel {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: space-between;
