@@ -407,6 +407,68 @@ kbd {
   border-color: rgba(255, 107, 53, 0.36);
 }
 
+.agenda-date-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding-bottom: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.agenda-date-tabs[hidden] {
+  display: none;
+}
+
+.agenda-date-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.agenda-date-button {
+  flex: 0 0 auto;
+  min-height: 52px;
+  padding: 8px 13px;
+  color: var(--ink);
+  background: rgba(0, 0, 0, 0.32);
+  border: 1px solid rgba(245, 241, 223, 0.14);
+  border-radius: 18px;
+  text-align: left;
+}
+
+.agenda-date-button strong,
+.agenda-date-button span {
+  display: block;
+}
+
+.agenda-date-button strong {
+  font-size: 0.78rem;
+  line-height: 1.15;
+}
+
+.agenda-date-button span {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.agenda-date-button.is-active,
+.agenda-date-button:hover,
+.agenda-date-button:focus-visible {
+  color: var(--black);
+  background: var(--signal);
+  border-color: var(--signal);
+}
+
+.agenda-date-button.is-active span,
+.agenda-date-button:hover span,
+.agenda-date-button:focus-visible span {
+  color: rgba(7, 8, 7, 0.68);
+}
+
 .agenda-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1138,6 +1200,27 @@ textarea:focus {
   transform: translate(-50%, 0);
 }
 
+.remote-debug {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 30;
+  max-width: min(720px, calc(100vw - 32px));
+  padding: 10px 12px;
+  color: var(--signal);
+  background: rgba(0, 0, 0, 0.82);
+  border: 1px solid rgba(231, 255, 85, 0.35);
+  border-radius: 14px;
+  font: 700 0.78rem/1.35 ui-monospace, SFMono-Regular, Consolas, monospace;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms ease;
+}
+
+.remote-debug.is-visible {
+  opacity: 1;
+}
+
 .channel-toast strong {
   font-family: var(--font-base);
   font-size: 0.9rem;
@@ -1441,6 +1524,11 @@ body.is-tv-mode .server-chip {
   min-height: 48px;
   padding: 0 16px;
   font-size: 0.82rem;
+}
+
+body.is-tv-mode .agenda-date-button {
+  min-height: 62px;
+  padding: 10px 16px;
 }
 
 body.is-tv-mode .watch-button {

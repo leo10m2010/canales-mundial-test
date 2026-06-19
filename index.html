@@ -3,8 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#070807" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Player Embed" />
     <title>Player Embed</title>
     <link rel="icon" href="data:," />
+    <link rel="manifest" href="manifest.webmanifest" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -46,6 +51,7 @@
             Marcador desde World Cup API y canales disponibles desde Stream-XHD. Se actualiza automaticamente mientras la pagina este abierta.
           </p>
           <div class="agenda-status" id="agendaStatus" role="status">Cargando agenda...</div>
+          <div class="agenda-date-tabs" id="agendaDateTabs" aria-label="Filtrar partidos por dia" hidden></div>
           <div class="agenda-grid" id="agendaGrid"></div>
         </section>
 
@@ -100,7 +106,7 @@
       <div class="player-stage" id="playerStage"></div>
       <div class="tv-overlay" id="tvOverlay" tabindex="-1" aria-label="Control remoto TV">
         <span>Control TV activo</span>
-        <small>Flechas cambian fuente · Enter abre canales · Esc vuelve</small>
+        <small>Izq/Der cambian fuente · OK/Menu abre canales · Back vuelve</small>
       </div>
       <div class="channel-switcher" id="channelSwitcher" aria-label="Cambiar canal"></div>
       <div class="channel-toast" id="channelToast" role="status" aria-live="polite" aria-atomic="true"></div>

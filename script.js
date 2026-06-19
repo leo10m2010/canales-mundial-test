@@ -17,6 +17,7 @@ const SELECTORS = {
   channelSearch: "#channelSearch",
   agendaGrid: "#agendaGrid",
   agendaStatus: "#agendaStatus",
+  agendaDateTabs: "#agendaDateTabs",
   agendaCount: "#agendaCount",
   refreshStreamxButton: "#refreshStreamxButton",
   modeLabel: "#modeLabel",
@@ -48,12 +49,82 @@ const DEMO_URL = "https://www.youtube.com/embed/dQw4w9WgXcQ";
 const CONTROLS_HIDE_DELAY = 2600;
 const TOAST_HIDE_DELAY = 2400;
 const SOURCE_NAVIGATION_COOLDOWN = 360;
-const SCORE_REFRESH_INTERVAL = 30000;
+const WORLD_CUP_LIVE_REFRESH_INTERVAL = 30000;
+const WORLD_CUP_SOON_REFRESH_INTERVAL = 60000;
+const WORLD_CUP_IDLE_REFRESH_INTERVAL = 300000;
 const STREAMX_REFRESH_INTERVAL = 120000;
 const CHANNELS_REFRESH_INTERVAL = 600000;
+const UPCOMING_LIVE_CHECK_WINDOW = 45 * 60000;
 const PLAYER_MODES = { PC: "pc", TV: "tv" };
+const REMOTE_DEBUG_ENABLED = new URLSearchParams(window.location.search).has("debugRemote");
+const REMOTE_ACTION_BY_KEY = {
+  ArrowUp: "up",
+  Up: "up",
+  ArrowDown: "down",
+  Down: "down",
+  ArrowLeft: "left",
+  Left: "left",
+  ArrowRight: "right",
+  Right: "right",
+  Enter: "ok",
+  Accept: "ok",
+  Select: "ok",
+  " ": "ok",
+  Spacebar: "ok",
+  Escape: "back",
+  Esc: "back",
+  Backspace: "back",
+  BrowserBack: "back",
+  GoBack: "back",
+  Back: "back",
+  ContextMenu: "menu",
+  Menu: "menu",
+  PageDown: "next",
+  PageUp: "previous",
+  ChannelUp: "channelUp",
+  ChannelDown: "channelDown",
+  MediaTrackNext: "next",
+  MediaTrackPrevious: "previous",
+  MediaPlayPause: "playPause",
+};
+const REMOTE_ACTION_BY_CODE = {
+  ArrowUp: "up",
+  ArrowDown: "down",
+  ArrowLeft: "left",
+  ArrowRight: "right",
+  Enter: "ok",
+  NumpadEnter: "ok",
+  Space: "ok",
+  Escape: "back",
+  Backspace: "back",
+  PageDown: "next",
+  PageUp: "previous",
+};
+const REMOTE_ACTION_BY_KEY_CODE = {
+  4: "back",
+  19: "up",
+  20: "down",
+  21: "left",
+  22: "right",
+  23: "ok",
+  66: "ok",
+  82: "menu",
+  85: "playPause",
+  87: "next",
+  88: "previous",
+  92: "previous",
+  93: "next",
+  111: "back",
+  160: "ok",
+  166: "channelUp",
+  167: "channelDown",
+};
+const REMOTE_TV_ACTIVATION_KEY_CODES = new Set([4, 19, 20, 21, 22, 23, 66, 82, 87, 88, 92, 93, 111, 160, 166, 167]);
+const REMOTE_TV_ACTIVATION_KEYS = new Set(["Accept", "Select", "GoBack", "BrowserBack", "ChannelUp", "ChannelDown", "MediaTrackNext", "MediaTrackPrevious"]);
+const pendingFetches = new Map();
 let controlsHideTimer = 0;
 let toastHideTimer = 0;
+let remoteDebugTimer = 0;
 let scoreRefreshTimer = 0;
 let streamxRefreshTimer = 0;
 let channelsRefreshTimer = 0;
@@ -65,12 +136,19 @@ let worldcupGames = [];
 let streamxLoading = false;
 let worldcupLoading = false;
 let streamxError = "";
+let channelsError = "";
 let worldcupError = "";
+let selectedAgendaDate = "";
+let lastWorldcupLoadedAt = 0;
+let lastStreamxLoadedAt = 0;
+let lastChannelsLoadedAt = 0;
 let currentPlaylist = [];
 let currentPlaylistTitle = "";
 let currentSourceKey = "";
 let tvOverlayLocked = true;
 let tvHomeFocusInitialized = false;
+let playerHistoryActive = false;
+let ignoreNextPopState = false;
 let playerMode = getInitialPlayerMode();
 
 function getInitialPlayerMode() {
@@ -90,11 +168,82 @@ function getInitialPlayerMode() {
 }
 
 function isLikelyTvDevice() {
-  return /android tv|smart-?tv|tizen|webos|bravia|aft\w*|fire tv|googletv|appletv|crkey|hbbtv/i.test(navigator.userAgent);
+  const userAgent = navigator.userAgent || "";
+  const normalized = normalizeText(userAgent);
+  const explicitTv = /android tv|smart-?tv|tizen|webos|bravia|aft\w*|fire tv|google ?tv|googletv|appletv|crkey|chromecast|hbbtv|mibox|mi box|mitv|xiaomi.*(tv|box)|shield android tv|nexus player|adt-\w+|onn\.? android tv/i.test(userAgent);
+  const androidLargeScreen = normalized.includes("android") && !normalized.includes("mobile") && isLargeLandscapeDisplay();
+  const coarseLargeScreen = isLargeLandscapeDisplay() && Boolean(window.matchMedia?.("(pointer: coarse)")?.matches);
+
+  return explicitTv || (androidLargeScreen && coarseLargeScreen);
+}
+
+function isLargeLandscapeDisplay() {
+  const screenWidth = window.screen?.width || window.innerWidth;
+  const screenHeight = window.screen?.height || window.innerHeight;
+  const largeScreen = Math.max(screenWidth, screenHeight) >= 960 && Math.max(window.innerWidth, window.innerHeight) >= 860;
+  const landscape = Boolean(window.matchMedia?.("(orientation: landscape)")?.matches) || window.innerWidth >= window.innerHeight;
+
+  return largeScreen && landscape;
 }
 
 function isTvMode() {
   return playerMode === PLAYER_MODES.TV;
+}
+
+function getEventKeyCode(event) {
+  return Number(event.keyCode || event.which || event.charCode || 0);
+}
+
+function normalizeRemoteAction(event) {
+  if (!event) {
+    return "";
+  }
+
+  const keyCode = getEventKeyCode(event);
+  return REMOTE_ACTION_BY_KEY[event.key]
+    || REMOTE_ACTION_BY_CODE[event.code]
+    || REMOTE_ACTION_BY_KEY_CODE[keyCode]
+    || "";
+}
+
+function isRemoteLikeEvent(event, action) {
+  const keyCode = getEventKeyCode(event);
+
+  return REMOTE_TV_ACTIVATION_KEY_CODES.has(keyCode)
+    || REMOTE_TV_ACTIVATION_KEYS.has(event.key)
+    || (["up", "down", "left", "right", "ok", "back"].includes(action) && isLikelyTvDevice());
+}
+
+function activateTvModeFromRemote(event, action) {
+  if (isTvMode() || !action || !isRemoteLikeEvent(event, action)) {
+    return;
+  }
+
+  tvOverlayLocked = true;
+  setPlayerMode(PLAYER_MODES.TV);
+
+  if (!dom.player.hidden) {
+    focusTvOverlay();
+  }
+}
+
+function showRemoteDebug(event, action) {
+  if (!REMOTE_DEBUG_ENABLED) {
+    return;
+  }
+
+  let panel = document.getElementById("remoteDebugPanel");
+
+  if (!panel) {
+    panel = createElement("div", "remote-debug");
+    panel.id = "remoteDebugPanel";
+    document.body.append(panel);
+  }
+
+  panel.textContent = `remote key=${event.key || "-"} code=${event.code || "-"} keyCode=${getEventKeyCode(event) || "-"} action=${action || "-"} mode=${playerMode}`;
+  panel.classList.add("is-visible");
+  window.clearTimeout(remoteDebugTimer);
+  remoteDebugTimer = window.setTimeout(() => panel.classList.remove("is-visible"), 6000);
 }
 
 function setPlayerMode(mode, options = {}) {
@@ -214,46 +363,15 @@ function getVisibleItems(items) {
 }
 
 async function loadStreamxData(options = {}) {
-  streamxLoading = true;
-  worldcupLoading = true;
-  streamxError = "";
-  worldcupError = "";
-  renderAgenda();
-
-  const [eventsResult, channelsResult, gamesResult] = await Promise.allSettled([
-    fetchJson(STREAMX_EVENTS_URL),
-    fetchJson(STREAMX_CHANNELS_URL),
-    fetchJson(WORLDCUP_GAMES_URL),
+  await Promise.allSettled([
+    loadStreamxSchedule({ forceRefresh: options.forceRefresh }),
+    loadStreamxChannels({ forceRefresh: options.forceRefresh }),
+    loadWorldcupGames({ forceRefresh: options.forceRefresh }),
   ]);
 
-  if (eventsResult.status === "fulfilled") {
-    streamxEvents = normalizeStreamxEvents(eventsResult.value);
-  } else {
-    streamxEvents = [];
-    streamxError = "No se pudo cargar la agenda Stream-XHD.";
-  }
-
-  if (channelsResult.status === "fulfilled") {
-    streamxChannelItems = normalizeStreamxChannels(channelsResult.value);
-  } else {
-    streamxChannelItems = [];
-    streamxError = streamxError || "No se pudieron cargar los canales 24/7.";
-  }
-
-  if (gamesResult.status === "fulfilled") {
-    worldcupGames = normalizeWorldcupGames(gamesResult.value);
-  } else {
-    worldcupGames = [];
-    worldcupError = "No se pudo cargar el marcador World Cup.";
-  }
-
-  streamxLoading = false;
-  worldcupLoading = false;
-  renderAgenda();
-  renderChannels();
   focusTvHomeFirst();
 
-  if (options.announce && !streamxError && !worldcupError) {
+  if (options.announce && !streamxError && !channelsError && !worldcupError) {
     showChannelToast({
       sourceName: "Agenda actualizada",
       name: "Agenda",
@@ -267,15 +385,25 @@ async function loadStreamxData(options = {}) {
 async function loadWorldcupGames(options = {}) {
   worldcupLoading = true;
   worldcupError = "";
+  renderAgenda();
 
   try {
-    worldcupGames = normalizeWorldcupGames(await fetchJson(WORLDCUP_GAMES_URL));
+    worldcupGames = normalizeWorldcupGames(await fetchJson(WORLDCUP_GAMES_URL, {
+      forceRefresh: options.forceRefresh,
+    }));
+    lastWorldcupLoadedAt = Date.now();
   } catch (error) {
-    worldcupError = "No se pudo actualizar el marcador World Cup.";
+    worldcupError = worldcupGames.length
+      ? "No se pudo actualizar el marcador World Cup. Se mantiene el ultimo dato disponible."
+      : "No se pudo cargar el marcador World Cup.";
   }
 
   worldcupLoading = false;
   renderAgenda();
+
+  if (scoreRefreshTimer) {
+    scheduleWorldcupRefresh();
+  }
 
   if (options.announce && !worldcupError) {
     showChannelToast({
@@ -291,11 +419,17 @@ async function loadWorldcupGames(options = {}) {
 async function loadStreamxSchedule(options = {}) {
   streamxLoading = true;
   streamxError = "";
+  renderAgenda();
 
   try {
-    streamxEvents = normalizeStreamxEvents(await fetchJson(STREAMX_EVENTS_URL));
+    streamxEvents = normalizeStreamxEvents(await fetchJson(STREAMX_EVENTS_URL, {
+      forceRefresh: options.forceRefresh,
+    }));
+    lastStreamxLoadedAt = Date.now();
   } catch (error) {
-    streamxError = "No se pudo actualizar la agenda Stream-XHD.";
+    streamxError = streamxEvents.length
+      ? "No se pudo actualizar la agenda Stream-XHD. Se mantiene el ultimo dato disponible."
+      : "No se pudo cargar la agenda Stream-XHD.";
   }
 
   streamxLoading = false;
@@ -313,23 +447,60 @@ async function loadStreamxSchedule(options = {}) {
   }
 }
 
-async function loadStreamxChannels() {
+async function loadStreamxChannels(options = {}) {
   try {
-    streamxChannelItems = normalizeStreamxChannels(await fetchJson(STREAMX_CHANNELS_URL));
+    channelsError = "";
+    streamxChannelItems = normalizeStreamxChannels(await fetchJson(STREAMX_CHANNELS_URL, {
+      forceRefresh: options.forceRefresh,
+    }));
+    lastChannelsLoadedAt = Date.now();
     renderChannels();
   } catch (error) {
-    streamxError = streamxError || "No se pudieron actualizar los canales 24/7.";
+    channelsError = streamxChannelItems.length
+      ? "No se pudieron actualizar los canales 24/7. Se mantiene el ultimo dato disponible."
+      : "No se pudieron cargar los canales 24/7.";
+  }
+
+  renderAgenda();
+}
+
+async function fetchJson(url, options = {}) {
+  const fetchKey = options.forceRefresh ? "" : url;
+
+  if (fetchKey && pendingFetches.has(fetchKey)) {
+    return pendingFetches.get(fetchKey);
+  }
+
+  const request = fetchJsonOnce(url, options);
+
+  if (fetchKey) {
+    pendingFetches.set(fetchKey, request);
+  }
+
+  try {
+    return await request;
+  } finally {
+    if (fetchKey) {
+      pendingFetches.delete(fetchKey);
+    }
   }
 }
 
-async function fetchJson(url) {
-  const response = await fetch(`${url}?v=${Date.now()}`, { cache: "no-store" });
+async function fetchJsonOnce(url, options = {}) {
+  const requestUrl = options.forceRefresh ? addCacheBust(url) : url;
+  const response = await fetch(requestUrl, {
+    cache: options.forceRefresh ? "reload" : "default",
+  });
 
   if (!response.ok) {
     throw new Error(`Fetch failed: ${url}`);
   }
 
   return response.json();
+}
+
+function addCacheBust(url) {
+  return `${url}${url.includes("?") ? "&" : "?"}v=${Date.now()}`;
 }
 
 function normalizeStreamxEvents(data) {
@@ -519,9 +690,11 @@ function canonicalTeamName(value) {
 }
 
 function findWorldcupGameForEvent(event) {
-  const key = makeMatchKey(event.homeTeam || "", event.awayTeam || "");
+  const eventHomeName = canonicalTeamName(event.homeTeam || "");
+  const eventAwayName = canonicalTeamName(event.awayTeam || "");
+  const key = eventHomeName && eventAwayName ? [eventHomeName, eventAwayName].sort().join("|") : "";
 
-  if (key !== "|") {
+  if (key) {
     const direct = worldcupGames.find((game) => game.matchKey === key);
 
     if (direct) {
@@ -531,7 +704,7 @@ function findWorldcupGameForEvent(event) {
 
   const eventDate = event.parsedDate || parseStreamxDate(event);
 
-  if (!eventDate) {
+  if (!eventDate || (!eventHomeName && !eventAwayName)) {
     return null;
   }
 
@@ -541,7 +714,10 @@ function findWorldcupGameForEvent(event) {
     }
 
     const minutes = Math.abs(game.parsedDate.getTime() - eventDate.getTime()) / 60000;
-    const sameSide = canonicalTeamName(game.homeTeam).includes(canonicalTeamName(event.homeTeam)) || canonicalTeamName(event.homeTeam).includes(canonicalTeamName(game.homeTeam));
+    const gameHomeName = canonicalTeamName(game.homeTeam);
+    const gameAwayName = canonicalTeamName(game.awayTeam);
+    const sameSide = (eventHomeName && (gameHomeName.includes(eventHomeName) || eventHomeName.includes(gameHomeName)))
+      || (eventAwayName && (gameAwayName.includes(eventAwayName) || eventAwayName.includes(gameAwayName)));
     return minutes <= 180 && sameSide;
   }) || null;
 }
@@ -711,44 +887,191 @@ function sortAgendaEvents(a, b) {
   return (a.parsedDate?.getTime() || Number.MAX_SAFE_INTEGER) - (b.parsedDate?.getTime() || Number.MAX_SAFE_INTEGER);
 }
 
-function renderAgenda() {
-  const agendaEvents = buildAgendaEvents();
-  const activeFocusKey = document.activeElement?.dataset?.tvFocusKey || "";
+function getAgendaEventDateKey(event) {
+  const date = event.parsedDate || event.worldcupGame?.parsedDate;
+  return date ? getPeruDateKey(date) : "";
+}
 
-  dom.agendaGrid.replaceChildren();
-  dom.agendaCount.textContent = `${agendaEvents.length} partidos`;
+function getPeruDateKey(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: PERU_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date).reduce((result, part) => {
+    if (part.type !== "literal") {
+      result[part.type] = part.value;
+    }
 
-  if (streamxLoading || worldcupLoading) {
-    setAgendaStatus("Cargando agenda, servidores y marcador...", false, true);
+    return result;
+  }, {});
+
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function dateFromPeruKey(dateKey) {
+  const [year, month, day] = String(dateKey || "").split("-").map(Number);
+
+  if (!year || !month || !day) {
+    return null;
+  }
+
+  return zonedTimeToDate(year, month, day, 12, 0, 0, PERU_TIME_ZONE);
+}
+
+function getAvailableAgendaDates(events) {
+  return Array.from(new Set(events.map(getAgendaEventDateKey).filter(Boolean))).sort();
+}
+
+function ensureSelectedAgendaDate(events) {
+  const dates = getAvailableAgendaDates(events);
+
+  if (!dates.length) {
+    selectedAgendaDate = "";
+    return dates;
+  }
+
+  if (dates.includes(selectedAgendaDate)) {
+    return dates;
+  }
+
+  const today = getPeruDateKey();
+  selectedAgendaDate = dates.includes(today)
+    ? today
+    : dates.find((dateKey) => dateKey > today) || dates[0];
+
+  return dates;
+}
+
+function getAgendaEventsForSelectedDate(events) {
+  if (!selectedAgendaDate) {
+    return events;
+  }
+
+  return events.filter((event) => getAgendaEventDateKey(event) === selectedAgendaDate);
+}
+
+function formatAgendaDateTabLabel(dateKey) {
+  const date = dateFromPeruKey(dateKey);
+
+  if (!date) {
+    return "Fecha pendiente";
+  }
+
+  const today = getPeruDateKey();
+  const tomorrow = getPeruDateKey(new Date(dateFromPeruKey(today).getTime() + 86400000));
+  const formatted = new Intl.DateTimeFormat("es-PE", {
+    timeZone: PERU_TIME_ZONE,
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+  }).format(date);
+
+  if (dateKey === today) {
+    return `Hoy · ${formatted}`;
+  }
+
+  if (dateKey === tomorrow) {
+    return `Mañana · ${formatted}`;
+  }
+
+  return formatted;
+}
+
+function renderAgendaDateTabs(dates, events) {
+  dom.agendaDateTabs.replaceChildren();
+  dom.agendaDateTabs.hidden = dates.length <= 1;
+
+  if (dates.length <= 1) {
     return;
   }
 
-  if ((streamxError || worldcupError) && !agendaEvents.length) {
+  const counts = events.reduce((result, event) => {
+    const dateKey = getAgendaEventDateKey(event);
+
+    if (dateKey) {
+      result.set(dateKey, (result.get(dateKey) || 0) + 1);
+    }
+
+    return result;
+  }, new Map());
+
+  dates.forEach((dateKey) => {
+    const count = counts.get(dateKey) || 0;
+    const button = createElement("button", "agenda-date-button");
+    button.type = "button";
+    button.dataset.tvFocusKey = `agenda-date:${dateKey}`;
+    button.classList.toggle("is-active", dateKey === selectedAgendaDate);
+    button.setAttribute("aria-pressed", String(dateKey === selectedAgendaDate));
+    button.append(
+      createElement("strong", "", formatAgendaDateTabLabel(dateKey)),
+      createElement("span", "", `${count} partido${count === 1 ? "" : "s"}`)
+    );
+    button.addEventListener("click", () => {
+      selectedAgendaDate = dateKey;
+      renderAgenda();
+    });
+    dom.agendaDateTabs.append(button);
+  });
+}
+
+function renderAgenda() {
+  const allAgendaEvents = buildAgendaEvents();
+  const availableAgendaDates = ensureSelectedAgendaDate(allAgendaEvents);
+  const agendaEvents = getAgendaEventsForSelectedDate(allAgendaEvents);
+  const activeFocusKey = document.activeElement?.dataset?.tvFocusKey || "";
+
+  dom.agendaGrid.replaceChildren();
+  renderAgendaDateTabs(availableAgendaDates, allAgendaEvents);
+  dom.agendaCount.textContent = selectedAgendaDate && agendaEvents.length !== allAgendaEvents.length
+    ? `${agendaEvents.length}/${allAgendaEvents.length} partidos`
+    : `${agendaEvents.length} partidos`;
+
+  if ((streamxLoading || worldcupLoading) && !allAgendaEvents.length) {
+    setAgendaStatus("Cargando agenda y marcador. La pagina mostrara los partidos apenas llegue la primera fuente...", false, true);
+    return;
+  }
+
+  if ((streamxError || worldcupError) && !allAgendaEvents.length) {
     setAgendaStatus(`${streamxError || worldcupError} En Netlify funcionara mediante proxy; en servidor local simple puede no estar disponible.`, true, true);
     return;
   }
 
-  if (!agendaEvents.length) {
+  if (!allAgendaEvents.length) {
     setAgendaStatus("No hay partidos Mundial 2026 disponibles ahora mismo.", false, true);
+    return;
+  }
+
+  if (!agendaEvents.length) {
+    setAgendaStatus(`No hay partidos para ${formatAgendaDateTabLabel(selectedAgendaDate)}. Elige otro dia disponible.`, false, true);
     return;
   }
 
   const statusParts = [];
 
-  if (worldcupError) {
+  if (worldcupLoading) {
+    statusParts.push("marcador actualizandose en segundo plano");
+  } else if (worldcupError) {
     statusParts.push(worldcupError);
   } else {
     statusParts.push("Marcador World Cup activo");
   }
 
-  if (streamxError) {
+  if (streamxLoading) {
+    statusParts.push("servidores Stream-XHD actualizandose");
+  } else if (streamxError) {
     statusParts.push(streamxError);
   } else {
     statusParts.push("servidores Stream-XHD activos");
   }
 
-  statusParts.push("auto-refresh: marcador 30s, servidores 2min");
-  setAgendaStatus(statusParts.join(" · "), Boolean(streamxError || worldcupError), false);
+  if (channelsError) {
+    statusParts.push(channelsError);
+  }
+
+  statusParts.push(`vista: ${formatAgendaDateTabLabel(selectedAgendaDate)}`);
+  statusParts.push("auto-refresh: marcador inteligente, servidores 2min");
+  setAgendaStatus(statusParts.join(" · "), Boolean(streamxError || worldcupError || channelsError), false);
 
   agendaEvents.forEach((event) => {
     dom.agendaGrid.append(createAgendaCard(event));
@@ -1605,6 +1928,52 @@ function showChannelToast(item) {
   }, TOAST_HIDE_DELAY);
 }
 
+function pushPlayerHistoryState() {
+  if (playerHistoryActive || !window.history?.pushState) {
+    return;
+  }
+
+  window.history.pushState({ playerEmbed: "player" }, "", window.location.href);
+  playerHistoryActive = true;
+}
+
+function syncPlayerHistoryAfterClose(options = {}) {
+  if (!playerHistoryActive || options.fromPopState || options.keepHistory) {
+    playerHistoryActive = false;
+    return;
+  }
+
+  if (window.history?.state?.playerEmbed === "player") {
+    ignoreNextPopState = true;
+    window.history.back();
+  }
+
+  playerHistoryActive = false;
+}
+
+function handlePlayerPopState() {
+  if (ignoreNextPopState) {
+    ignoreNextPopState = false;
+    return;
+  }
+
+  if (dom.player.hidden) {
+    playerHistoryActive = false;
+    return;
+  }
+
+  if (dom.channelSwitcher.classList.contains("is-open")) {
+    playerHistoryActive = false;
+    toggleChannelSwitcher(false);
+    pushPlayerHistoryState();
+    revealControls();
+    return;
+  }
+
+  playerHistoryActive = false;
+  closePlayer({ fromPopState: true });
+}
+
 async function openPlayer(embed, options = {}) {
   const normalizedEmbed = normalizeEmbed(embed);
 
@@ -1622,7 +1991,13 @@ async function openPlayer(embed, options = {}) {
   toggleChannelSwitcher(false);
   dom.setupPanel.hidden = true;
   dom.player.hidden = false;
+
+  if (isTvMode()) {
+    tvOverlayLocked = true;
+  }
+
   syncTvOverlay();
+  pushPlayerHistoryState();
 
   if (!options.keepFullscreen && (isTvMode() || options.forceFullscreen)) {
     await enterFullscreen();
@@ -1652,7 +2027,7 @@ function openItem(item, options = {}) {
   }
 }
 
-async function closePlayer() {
+async function closePlayer(options = {}) {
   if (document.fullscreenElement && document.exitFullscreen) {
     await document.exitFullscreen();
   }
@@ -1669,6 +2044,7 @@ async function closePlayer() {
   renderChannelSwitcher();
   syncTvOverlay();
   window.clearTimeout(toastHideTimer);
+  syncPlayerHistoryAfterClose(options);
 }
 
 async function handleBackNavigation() {
@@ -1694,6 +2070,80 @@ function isTypingTarget(element) {
   return element.isContentEditable || ["input", "textarea", "select"].includes(tagName);
 }
 
+function isElementVisible(element) {
+  if (!element || element.disabled || element.getAttribute("aria-hidden") === "true") {
+    return false;
+  }
+
+  const rect = element.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0;
+}
+
+function getElementCenter(element) {
+  const rect = element.getBoundingClientRect();
+  return {
+    x: rect.left + rect.width / 2,
+    y: rect.top + rect.height / 2,
+  };
+}
+
+function focusElement(element) {
+  if (!element) {
+    return;
+  }
+
+  element.focus({ preventScroll: false });
+  element.scrollIntoView({ block: "nearest", inline: "nearest" });
+}
+
+function findSpatialTarget(elements, current, direction) {
+  if (!current || !elements.includes(current)) {
+    return elements[0] || null;
+  }
+
+  const currentCenter = getElementCenter(current);
+  const candidates = elements
+    .filter((element) => element !== current)
+    .map((element) => {
+      const center = getElementCenter(element);
+      const dx = center.x - currentCenter.x;
+      const dy = center.y - currentCenter.y;
+      const primary = direction === "right" ? dx
+        : direction === "left" ? -dx
+          : direction === "down" ? dy
+            : -dy;
+      const secondary = direction === "right" || direction === "left" ? Math.abs(dy) : Math.abs(dx);
+
+      return { element, primary, secondary };
+    })
+    .filter((candidate) => candidate.primary > 4)
+    .sort((a, b) => (a.primary * 1000 + a.secondary) - (b.primary * 1000 + b.secondary));
+
+  return candidates[0]?.element || null;
+}
+
+function moveSpatialFocus(elements, direction) {
+  const visibleElements = elements.filter(isElementVisible);
+
+  if (!visibleElements.length) {
+    return;
+  }
+
+  const target = findSpatialTarget(visibleElements, document.activeElement, direction) || visibleElements[0];
+  focusElement(target);
+}
+
+function clickFocusedButton() {
+  const target = document.activeElement;
+
+  if (target && typeof target.click === "function" && !target.disabled) {
+    target.click();
+    return true;
+  }
+
+  return false;
+}
+
 function moveSwitcherFocus(direction) {
   const buttons = Array.from(dom.channelSwitcher.querySelectorAll("button"));
 
@@ -1701,12 +2151,7 @@ function moveSwitcherFocus(direction) {
     return;
   }
 
-  const currentIndex = buttons.indexOf(document.activeElement);
-  const nextIndex = currentIndex === -1
-    ? 0
-    : (currentIndex + direction + buttons.length) % buttons.length;
-
-  buttons[nextIndex].focus({ preventScroll: false });
+  moveSpatialFocus(buttons, direction);
 }
 
 function getTvHomeFocusables() {
@@ -1748,25 +2193,183 @@ function moveTvHomeFocus(direction) {
     return;
   }
 
-  const currentIndex = focusables.indexOf(document.activeElement);
-  const nextIndex = currentIndex === -1
-    ? 0
-    : (currentIndex + direction + focusables.length) % focusables.length;
+  moveSpatialFocus(focusables, direction);
+}
 
-  focusables[nextIndex].focus({ preventScroll: false });
-  focusables[nextIndex].scrollIntoView({ block: "center", inline: "nearest" });
+function handleHomeRemoteAction(event, action) {
+  if (!isTvMode()) {
+    return false;
+  }
+
+  if (["up", "down", "left", "right"].includes(action)) {
+    event.preventDefault();
+    moveTvHomeFocus(action);
+    return true;
+  }
+
+  if (action === "ok") {
+    event.preventDefault();
+
+    if (!clickFocusedButton()) {
+      focusTvHomeFirst();
+    }
+
+    return true;
+  }
+
+  if (action === "menu") {
+    event.preventDefault();
+    focusTvHomeFirst();
+    return true;
+  }
+
+  return false;
+}
+
+function handleSwitcherRemoteAction(event, action) {
+  if (!["up", "down", "left", "right", "ok", "back", "menu"].includes(action)) {
+    return false;
+  }
+
+  event.preventDefault();
+
+  if (["up", "down", "left", "right"].includes(action)) {
+    moveSwitcherFocus(action);
+    return true;
+  }
+
+  if (action === "ok") {
+    clickFocusedButton();
+    return true;
+  }
+
+  toggleChannelSwitcher(false);
+  revealControls();
+  return true;
+}
+
+function handlePlayerRemoteAction(event, action) {
+  if (!action) {
+    return false;
+  }
+
+  if (dom.channelSwitcher.classList.contains("is-open") && handleSwitcherRemoteAction(event, action)) {
+    return true;
+  }
+
+  if (action === "back") {
+    event.preventDefault();
+    handleBackNavigation();
+    return true;
+  }
+
+  if (action === "menu") {
+    event.preventDefault();
+    toggleChannelSwitcher(undefined, { focus: true });
+    revealControls();
+    return true;
+  }
+
+  if (action === "ok" && isTvMode()) {
+    event.preventDefault();
+    toggleChannelSwitcher(true, { focus: true });
+    revealControls();
+    return true;
+  }
+
+  if (["up", "down"].includes(action) && isTvMode()) {
+    event.preventDefault();
+    toggleChannelSwitcher(true, { focus: true });
+    revealControls();
+    return true;
+  }
+
+  if (["right", "next", "channelUp"].includes(action)) {
+    event.preventDefault();
+
+    if (canRunSourceNavigation(event)) {
+      openItemByOffset(1);
+    }
+
+    revealControls();
+    return true;
+  }
+
+  if (["left", "previous", "channelDown"].includes(action)) {
+    event.preventDefault();
+
+    if (canRunSourceNavigation(event)) {
+      openItemByOffset(-1);
+    }
+
+    revealControls();
+    return true;
+  }
+
+  return false;
+}
+
+function handleRemoteAction(event, action) {
+  if (!action) {
+    return false;
+  }
+
+  activateTvModeFromRemote(event, action);
+
+  if (dom.player.hidden) {
+    return handleHomeRemoteAction(event, action);
+  }
+
+  return handlePlayerRemoteAction(event, action);
+}
+
+function hasSoonWorldcupGame() {
+  const now = Date.now();
+
+  return worldcupGames.some((game) => {
+    if (!game.parsedDate || getWorldcupGameStatus(game).key !== "upcoming") {
+      return false;
+    }
+
+    const startsIn = game.parsedDate.getTime() - now;
+    return startsIn > 0 && startsIn <= UPCOMING_LIVE_CHECK_WINDOW;
+  });
+}
+
+function getWorldcupRefreshInterval() {
+  if (hasLiveWorldcupGame()) {
+    return WORLD_CUP_LIVE_REFRESH_INTERVAL;
+  }
+
+  if (hasSoonWorldcupGame()) {
+    return WORLD_CUP_SOON_REFRESH_INTERVAL;
+  }
+
+  return WORLD_CUP_IDLE_REFRESH_INTERVAL;
+}
+
+function isDataStale(lastLoadedAt, maxAge) {
+  return !lastLoadedAt || Date.now() - lastLoadedAt >= maxAge;
+}
+
+function scheduleWorldcupRefresh() {
+  window.clearTimeout(scoreRefreshTimer);
+
+  scoreRefreshTimer = window.setTimeout(async () => {
+    if (!document.hidden) {
+      await loadWorldcupGames();
+    }
+
+    scheduleWorldcupRefresh();
+  }, getWorldcupRefreshInterval());
 }
 
 function startAutoRefresh() {
-  window.clearInterval(scoreRefreshTimer);
+  window.clearTimeout(scoreRefreshTimer);
   window.clearInterval(streamxRefreshTimer);
   window.clearInterval(channelsRefreshTimer);
 
-  scoreRefreshTimer = window.setInterval(() => {
-    if (!document.hidden) {
-      loadWorldcupGames();
-    }
-  }, SCORE_REFRESH_INTERVAL);
+  scheduleWorldcupRefresh();
 
   streamxRefreshTimer = window.setInterval(() => {
     if (!document.hidden) {
@@ -1782,8 +2385,17 @@ function startAutoRefresh() {
 
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) {
-      loadWorldcupGames();
-      loadStreamxSchedule();
+      if (isDataStale(lastWorldcupLoadedAt, getWorldcupRefreshInterval())) {
+        loadWorldcupGames();
+      }
+
+      if (isDataStale(lastStreamxLoadedAt, STREAMX_REFRESH_INTERVAL)) {
+        loadStreamxSchedule();
+      }
+
+      if (isDataStale(lastChannelsLoadedAt, CHANNELS_REFRESH_INTERVAL)) {
+        loadStreamxChannels();
+      }
     }
   });
 }
@@ -1805,7 +2417,7 @@ function bindEvents() {
   });
 
   dom.refreshStreamxButton.addEventListener("click", () => {
-    loadStreamxData({ announce: true });
+    loadStreamxData({ announce: true, forceRefresh: true });
   });
 
   dom.fullscreenButton.addEventListener("click", toggleFullscreen);
@@ -1828,34 +2440,29 @@ function bindEvents() {
     revealControls();
   });
   dom.channelSwitcher.addEventListener("keydown", (event) => {
-    if (["ArrowDown", "ArrowRight"].includes(event.key)) {
-      event.preventDefault();
-      event.stopPropagation();
-      moveSwitcherFocus(1);
-      return;
-    }
+    const action = normalizeRemoteAction(event);
+    showRemoteDebug(event, action);
 
-    if (["ArrowUp", "ArrowLeft"].includes(event.key)) {
-      event.preventDefault();
+    if (handleSwitcherRemoteAction(event, action)) {
       event.stopPropagation();
-      moveSwitcherFocus(-1);
-      return;
-    }
-
-    if (["Escape", "Backspace", "BrowserBack", "GoBack"].includes(event.key)) {
-      event.preventDefault();
-      event.stopPropagation();
-      toggleChannelSwitcher(false);
     }
   });
   document.addEventListener("fullscreenchange", syncFullscreenButton);
+  window.addEventListener("popstate", handlePlayerPopState);
 
   document.addEventListener("keydown", (event) => {
-    if (isTypingTarget(event.target) && event.key !== "Escape") {
+    const remoteAction = normalizeRemoteAction(event);
+    showRemoteDebug(event, remoteAction);
+
+    if (isTypingTarget(event.target) && !["back"].includes(remoteAction)) {
       return;
     }
 
     if (event.altKey || event.ctrlKey || event.metaKey) {
+      return;
+    }
+
+    if (handleRemoteAction(event, remoteAction)) {
       return;
     }
 
@@ -1867,18 +2474,6 @@ function bindEvents() {
     }
 
     if (dom.player.hidden) {
-      if (isTvMode() && ["ArrowRight", "ArrowDown"].includes(event.key)) {
-        event.preventDefault();
-        moveTvHomeFocus(1);
-        return;
-      }
-
-      if (isTvMode() && ["ArrowLeft", "ArrowUp"].includes(event.key)) {
-        event.preventDefault();
-        moveTvHomeFocus(-1);
-        return;
-      }
-
       return;
     }
 
@@ -1906,20 +2501,6 @@ function bindEvents() {
     if (["e", "E"].includes(event.key)) {
       event.preventDefault();
       handleBackNavigation();
-      return;
-    }
-
-    if (isTvMode() && event.key === "Enter") {
-      event.preventDefault();
-      toggleChannelSwitcher(true, { focus: true });
-      revealControls();
-      return;
-    }
-
-    if (isTvMode() && ["ArrowUp", "ArrowDown"].includes(event.key)) {
-      event.preventDefault();
-      toggleChannelSwitcher(true, { focus: true });
-      revealControls();
       return;
     }
 

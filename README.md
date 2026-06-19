@@ -32,16 +32,22 @@ El embed manual acepta URLs directas o iframes con `src`.
 - `TV`: intenta fullscreen al reproducir y activa un overlay para que el control remoto no lo robe el iframe.
 - En `TV`, el inicio enfoca partidos/canales y se navega con flechas.
 - Puedes forzar modo con `?mode=pc` o `?mode=tv`.
+- En Android TV/Xiaomi TV Box se detectan teclas D-pad por `key`, `code` y `keyCode`.
+- Si el navegador no reporta bien el dispositivo, al detectar un control remoto se activa modo TV automaticamente.
+- Para diagnosticar un control remoto, abre `?debugRemote=1` y pulsa botones: se vera `key`, `code`, `keyCode` y accion normalizada.
 
 ## Datos y actualizacion
 
 - Marcador, estado y resultados: `worldcup26.ir/get/games`.
 - Canales por partido: `stream-xhd.com/eventos.json`.
 - Canales 24/7: `stream-xhd.com/canales/canales.json`.
-- Marcador: se actualiza cada 30 segundos.
+- Marcador: se actualiza cada 30 segundos si hay partido en vivo, cada 60 segundos si un partido esta por empezar y cada 5 minutos en reposo.
 - Servidores de agenda: se actualizan cada 2 minutos.
 - Canales 24/7: se actualizan cada 10 minutos.
-- Al volver a la pestana o app, se fuerza una actualizacion de marcador y agenda.
+- La agenda se pinta apenas llega Stream-XHD; el marcador World Cup se agrega despues si la API responde lento.
+- Por defecto se muestran solo los partidos del dia seleccionado. Si hoy no hay partidos, se abre el proximo dia disponible.
+- Al volver a la pestana o app, solo se actualizan las fuentes que ya esten vencidas.
+- El boton `Actualizar agenda` fuerza una lectura nueva y evita el cache normal.
 
 ## Teclado
 
@@ -53,8 +59,16 @@ El embed manual acepta URLs directas o iframes con `src`.
 - `I`: en modo TV, liberar o recuperar el control del iframe.
 - `E`: atras.
 - `Esc`, `Backspace` o boton Back del control remoto: atras.
+- `OK`/`Enter`: en TV abre canales o selecciona el canal enfocado.
+- `Menu`: abre/cierra canales en TV.
+- `ChannelUp`/`ChannelDown`: siguiente/anterior fuente cuando el control lo soporta.
 
-En modo TV, `Enter` abre el panel de canales y `ArrowUp`/`ArrowDown` enfocan la lista.
+En modo TV, la navegacion usa foco espacial: las flechas saltan al boton visualmente mas cercano en esa direccion.
+
+## Instalacion como app TV
+
+- La pagina incluye `manifest.webmanifest` con `display: fullscreen`, `orientation: landscape` y `start_url` en modo TV.
+- En Android TV/Google TV, usa la opcion del navegador para anadir o fijar la pagina si esta disponible.
 
 ## Netlify
 
