@@ -73,6 +73,8 @@
             <span><kbd>N</kbd> siguiente</span>
             <span><kbd>P</kbd> anterior</span>
             <span><kbd>C</kbd> canales</span>
+            <span><kbd>D</kbd> doble</span>
+            <span><kbd>V</kbd> ventana</span>
             <span><kbd>F</kbd> fullscreen</span>
             <span><kbd>T</kbd> PC/TV</span>
             <span><kbd>Esc</kbd> atras</span>
@@ -103,10 +105,21 @@
     </main>
 
     <section class="player" id="player" aria-label="Reproductor embed" hidden>
-      <div class="player-stage" id="playerStage"></div>
+      <div class="player-grid" id="playerGrid">
+        <section class="player-pane is-primary is-active" id="primaryPlayerPane" data-pane="primary" tabindex="-1" aria-label="Ventana 1">
+          <button class="pane-badge" type="button" data-activate-pane="primary" aria-label="Activar ventana 1">Ventana 1</button>
+          <div class="pane-match" id="primaryPaneMatch" aria-hidden="true"></div>
+          <div class="player-stage" id="playerStage"></div>
+        </section>
+        <section class="player-pane is-secondary" id="secondaryPlayerPane" data-pane="secondary" tabindex="-1" aria-label="Ventana 2" hidden>
+          <button class="pane-badge" type="button" data-activate-pane="secondary" aria-label="Activar ventana 2">Ventana 2</button>
+          <div class="pane-match" id="secondaryPaneMatch" aria-hidden="true"></div>
+          <div class="player-stage" id="secondaryPlayerStage"></div>
+        </section>
+      </div>
       <div class="tv-overlay" id="tvOverlay" tabindex="-1" role="button" aria-label="Abrir canales con control remoto TV" aria-haspopup="dialog">
         <span>Control TV activo</span>
-        <small>Izq/Der cambian fuente · OK/Menu abre canales · Back vuelve</small>
+        <small>Izq/Der cambian fuente · Arr/Ab cambia ventana en vista doble · OK/Menu abre canales · Back vuelve</small>
       </div>
       <div class="channel-switcher" id="channelSwitcher" role="dialog" tabindex="-1" aria-label="Cambiar canal" aria-hidden="true"></div>
       <div class="channel-toast" id="channelToast" role="status" aria-live="polite" aria-atomic="true"></div>
@@ -116,6 +129,18 @@
             <path d="M4 7a2 2 0 1 1 4 0 2 2 0 0 1-4 0Zm6-1h10v2H10V6ZM4 12a2 2 0 1 1 4 0 2 2 0 0 1-4 0Zm6-1h10v2H10v-2Zm-6 6a2 2 0 1 1 4 0 2 2 0 0 1-4 0Zm6-1h10v2H10v-2Z" />
           </svg>
           <span class="sr-only">Canales</span>
+        </button>
+        <button class="icon-button" type="button" id="splitButton" aria-label="Agregar segunda pantalla" title="Agregar segunda pantalla (D)">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M3 5h8v14H3V5Zm2 2v10h4V7H5Zm8-2h8v14h-8V5Zm2 2v10h4V7h-4Z" />
+          </svg>
+          <span class="sr-only">Vista doble</span>
+        </button>
+        <button class="icon-button" type="button" id="closeSplitButton" aria-label="Cerrar segunda pantalla" title="Cerrar segunda pantalla" hidden>
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 5h16v14H4V5Zm2 2v10h12V7H6Zm4 4h4v2h-4v-2Z" />
+          </svg>
+          <span class="sr-only">Cerrar segunda pantalla</span>
         </button>
         <button class="icon-button" type="button" id="fullscreenButton" aria-label="Pantalla completa" title="Pantalla completa (F)">
           <svg viewBox="0 0 24 24" aria-hidden="true">

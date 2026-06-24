@@ -3,10 +3,18 @@ const SELECTORS = {
   input: "#embedInput",
   setupPanel: "#setupPanel",
   player: "#player",
+  playerGrid: "#playerGrid",
+  primaryPlayerPane: "#primaryPlayerPane",
+  primaryPaneMatch: "#primaryPaneMatch",
   playerStage: "#playerStage",
+  secondaryPlayerPane: "#secondaryPlayerPane",
+  secondaryPaneMatch: "#secondaryPaneMatch",
+  secondaryPlayerStage: "#secondaryPlayerStage",
   closeButton: "#closeButton",
   fullscreenButton: "#fullscreenButton",
   channelsButton: "#channelsButton",
+  splitButton: "#splitButton",
+  closeSplitButton: "#closeSplitButton",
   modeToggleButton: "#modeToggleButton",
   iframeControlButton: "#iframeControlButton",
   demoButton: "#demoButton",
@@ -56,6 +64,8 @@ const STREAMX_REFRESH_INTERVAL = 120000;
 const CHANNELS_REFRESH_INTERVAL = 600000;
 const UPCOMING_LIVE_CHECK_WINDOW = 45 * 60000;
 const PLAYER_MODES = { PC: "pc", TV: "tv" };
+const PLAYER_PANES = { PRIMARY: "primary", SECONDARY: "secondary" };
+const SIMULTANEOUS_MATCH_TOLERANCE = 15 * 60000;
 const REMOTE_DEBUG_ENABLED = new URLSearchParams(window.location.search).has("debugRemote");
 const REMOTE_ACTION_BY_KEY = {
   ArrowUp: "up",
@@ -149,9 +159,12 @@ let selectedAgendaDate = "";
 let lastWorldcupLoadedAt = 0;
 let lastStreamxLoadedAt = 0;
 let lastChannelsLoadedAt = 0;
-let currentPlaylist = [];
-let currentPlaylistTitle = "";
-let currentSourceKey = "";
+const playerPaneStates = {
+  [PLAYER_PANES.PRIMARY]: createPaneState(),
+  [PLAYER_PANES.SECONDARY]: createPaneState(),
+};
+let activePaneId = PLAYER_PANES.PRIMARY;
+let channelSwitcherTargetPaneId = "";
 let tvOverlayLocked = true;
 let tvHomeFocusInitialized = false;
 let playerHistoryActive = false;
@@ -200,6 +213,40 @@ function isCompactViewport() {
 
 function isTvMode() {
   return playerMode === PLAYER_MODES.TV;
+}
+
+function createPaneState() {
+  return {
+    item: null,
+    match: null,
+    playlist: [],
+    playlistTitle: "",
+    sourceKey: "",
+  };
+}
+
+function getPaneState(paneId = activePaneId) {
+  return playerPaneStates[paneId] || playerPaneStates[PLAYER_PANES.PRIMARY];
+}
+
+function getPaneStage(paneId = activePaneId) {
+  return paneId === PLAYER_PANES.SECONDARY ? dom.secondaryPlayerStage : dom.playerStage;
+}
+
+function getPaneMatchElement(paneId = activePaneId) {
+  return paneId === PLAYER_PANES.SECONDARY ? dom.secondaryPaneMatch : dom.primaryPaneMatch;
+}
+
+function getPaneLabel(paneId = activePaneId) {
+  return paneId === PLAYER_PANES.SECONDARY ? "Ventana 2" : "Ventana 1";
+}
+
+function getSwitcherPaneId() {
+  return channelSwitcherTargetPaneId || activePaneId;
+}
+
+function isSplitMode() {
+  return !dom.secondaryPlayerPane.hidden;
 }
 
 function safeStorageGet(key) {
@@ -837,6 +884,51 @@ function countryToFlagCode(country) {
   return map[normalized] || "world";
 }
 
+function getTeamFlagCode(teamName) {
+  const map = {
+    argentina: "ar",
+    australia: "au",
+    austria: "at",
+    belgium: "be",
+    "bosnia and herzegovina": "ba",
+    brazil: "br",
+    canada: "ca",
+    chile: "cl",
+    colombia: "co",
+    croatia: "hr",
+    curacao: "cw",
+    "czech republic": "cz",
+    ecuador: "ec",
+    egypt: "eg",
+    england: "gb-eng",
+    france: "fr",
+    germany: "de",
+    ghana: "gh",
+    haiti: "ht",
+    iran: "ir",
+    iraq: "iq",
+    japan: "jp",
+    mexico: "mx",
+    morocco: "ma",
+    netherlands: "nl",
+    paraguay: "py",
+    portugal: "pt",
+    qatar: "qa",
+    scotland: "gb-sct",
+    "south africa": "za",
+    "south korea": "kr",
+    spain: "es",
+    sweden: "se",
+    switzerland: "ch",
+    tunisia: "tn",
+    turkey: "tr",
+    "united states": "us",
+    uruguay: "uy",
+  };
+
+  return map[canonicalTeamName(teamName)] || "";
+}
+
 function normalizeStreamxLanguage(item) {
   const raw = normalizeText([
     item.language,
@@ -1123,7 +1215,7 @@ function renderAgenda() {
   setAgendaStatus(statusParts.join(" · "), Boolean(streamxError || worldcupError || channelsError), false);
 
   agendaEvents.forEach((event) => {
-    dom.agendaGrid.append(createAgendaCard(event));
+    dom.agendaGrid.append(createAgendaCard(event, agendaEvents));
   });
 
   restoreTvHomeFocus(activeFocusKey);
@@ -1135,9 +1227,37 @@ function setAgendaStatus(message, isError, isProminent) {
   dom.agendaStatus.classList.toggle("is-prominent", isProminent);
 }
 
-function createAgendaCard(event) {
+function hasPlayableServers(event) {
+  const servers = event.serverItems || getEventServerItems(event);
+  return servers.length > 0;
+}
+
+function getSimultaneousAgendaEvents(event, events) {
+  const eventDate = event.parsedDate || event.worldcupGame?.parsedDate;
+
+  if (!eventDate || !hasPlayableServers(event)) {
+    return [];
+  }
+
+  return events.filter((candidate) => {
+    if (!candidate || candidate.id === event.id || !hasPlayableServers(candidate)) {
+      return false;
+    }
+
+    const candidateDate = candidate.parsedDate || candidate.worldcupGame?.parsedDate;
+
+    if (!candidateDate) {
+      return false;
+    }
+
+    return Math.abs(candidateDate.getTime() - eventDate.getTime()) <= SIMULTANEOUS_MATCH_TOLERANCE;
+  });
+}
+
+function createAgendaCard(event, agendaEvents = []) {
   const status = event.statusInfo || getAgendaStatus(event);
   const servers = event.serverItems || getEventServerItems(event);
+  const simultaneousEvents = getSimultaneousAgendaEvents(event, agendaEvents);
   const playlistTitle = `Servidores de ${event.title}`;
   const card = createElement("article", `match-card is-${status.key}`);
   const head = createElement("div", "match-head");
@@ -1161,14 +1281,22 @@ function createAgendaCard(event) {
     const watchButton = createElement("button", "watch-button", "Ver primer canal");
     watchButton.type = "button";
     watchButton.dataset.tvFocusKey = `watch:${event.id}`;
-    watchButton.addEventListener("click", () => openItem(servers[0], { playlist: servers, playlistTitle }));
+    watchButton.addEventListener("click", () => openItem(servers[0], { playlist: servers, playlistTitle, match: event }));
     serverList.append(watchButton);
 
     servers.forEach((serverItem) => {
       const button = createElement("button", "server-chip", serverItem.sourceName);
       button.type = "button";
       button.dataset.tvFocusKey = getItemKey(serverItem);
-      button.addEventListener("click", () => openItem(serverItem, { playlist: servers, playlistTitle }));
+      button.addEventListener("click", () => openItem(serverItem, { playlist: servers, playlistTitle, match: event }));
+      serverList.append(button);
+    });
+
+    simultaneousEvents.forEach((simultaneousEvent) => {
+      const button = createElement("button", "server-chip split-chip", `Doble: ${formatCompactMatchTitle(simultaneousEvent)}`);
+      button.type = "button";
+      button.dataset.tvFocusKey = `split:${event.id}:${simultaneousEvent.id}`;
+      button.addEventListener("click", () => openSplitEvents(event, simultaneousEvent));
       serverList.append(button);
     });
   } else {
@@ -1494,6 +1622,12 @@ function makeTitleFromTeams(event) {
   return event.homeTeam && event.awayTeam ? `${event.homeTeam} vs ${event.awayTeam}` : "";
 }
 
+function formatCompactMatchTitle(event) {
+  const home = cleanText(event.homeTeam || "Local");
+  const away = cleanText(event.awayTeam || "Visitante");
+  return home && away ? `${home} vs ${away}` : cleanText(event.title || "otro partido");
+}
+
 function makeInitials(value) {
   return String(value || "TV")
     .split(/\s+/)
@@ -1582,6 +1716,85 @@ function createElement(tagName, className, text) {
   }
 
   return element;
+}
+
+function createPaneTeam(teamName, logo) {
+  const team = createElement("span", "pane-team");
+  const flag = createElement("span", "pane-flag");
+  const flagCode = getTeamFlagCode(teamName);
+  const useFallback = () => {
+    flag.replaceChildren();
+    flag.classList.add("is-fallback");
+    flag.textContent = makeInitials(teamName).slice(0, 2);
+  };
+
+  if (logo) {
+    const image = document.createElement("img");
+    image.src = logo;
+    image.alt = teamName;
+    image.loading = "lazy";
+    image.onerror = useFallback;
+    flag.append(image);
+  } else if (flagCode) {
+    const image = document.createElement("img");
+    image.src = `https://flagcdn.com/${flagCode}.svg`;
+    image.alt = teamName;
+    image.loading = "lazy";
+    image.onerror = useFallback;
+    flag.append(image);
+  } else {
+    useFallback();
+  }
+
+  team.append(flag, createElement("strong", "", teamName));
+  return team;
+}
+
+function createPaneMatchHeader(paneState, paneId) {
+  const header = createElement("div", "pane-match-inner");
+  const match = paneState.match;
+
+  if (match) {
+    const homeTeam = cleanText(match.homeTeam || "Local");
+    const awayTeam = cleanText(match.awayTeam || "Visitante");
+    const meta = createElement("span", "pane-match-meta", `${getPaneLabel(paneId)} · ${formatAgendaTime(match)}`);
+    const versus = createElement("span", "pane-versus", "vs");
+
+    header.append(
+      meta,
+      createElement("span", "pane-match-teams", ""),
+    );
+    header.lastElementChild.append(
+      createPaneTeam(homeTeam, match.homeLogo),
+      versus,
+      createPaneTeam(awayTeam, match.awayLogo)
+    );
+    return header;
+  }
+
+  const item = paneState.item;
+  const sourceName = item?.sourceName || getPaneLabel(paneId);
+  const label = item ? `${item.name || item.language || "Canal"}` : "Sin canal seleccionado";
+
+  header.append(
+    createElement("span", "pane-match-meta", getPaneLabel(paneId)),
+    createElement("strong", "pane-source-title", sourceName),
+    createElement("span", "pane-source-subtitle", label)
+  );
+  return header;
+}
+
+function syncPaneMatchHeaders() {
+  Object.values(PLAYER_PANES).forEach((paneId) => {
+    const paneState = getPaneState(paneId);
+    const pane = paneId === PLAYER_PANES.SECONDARY ? dom.secondaryPlayerPane : dom.primaryPlayerPane;
+    const target = getPaneMatchElement(paneId);
+    const title = paneState.match ? formatCompactMatchTitle(paneState.match) : paneState.item?.sourceName || getPaneLabel(paneId);
+
+    target.replaceChildren(createPaneMatchHeader(paneState, paneId));
+    target.setAttribute("aria-hidden", String(!isSplitMode()));
+    pane.setAttribute("aria-label", `${getPaneLabel(paneId)}: ${title}`);
+  });
 }
 
 function createFlag(channel) {
@@ -1707,14 +1920,99 @@ function renderChannels() {
   renderChannelSwitcher();
 }
 
+function setActivePane(paneId, options = {}) {
+  const nextPaneId = paneId === PLAYER_PANES.SECONDARY && !dom.secondaryPlayerPane.hidden
+    ? PLAYER_PANES.SECONDARY
+    : PLAYER_PANES.PRIMARY;
+
+  activePaneId = nextPaneId;
+  channelSwitcherTargetPaneId = "";
+  syncSplitMode();
+  updateActiveChannel(getCurrentSource(activePaneId), getPaneState(activePaneId).sourceKey, activePaneId);
+
+  if (dom.channelSwitcher.classList.contains("is-open")) {
+    renderChannelSwitcher();
+  }
+
+  if (!options.silent && isSplitMode()) {
+    showChannelToast({
+      sourceName: `${getPaneLabel(activePaneId)} activa`,
+      name: "Vista doble",
+      language: "El selector y las flechas controlan esta ventana",
+      quality: "Split",
+      sourceUrl: getCurrentSource(activePaneId),
+    }, activePaneId);
+  }
+}
+
+function syncSplitMode() {
+  const splitActive = !dom.secondaryPlayerPane.hidden;
+  dom.player.classList.toggle("is-split", splitActive);
+  dom.primaryPlayerPane.classList.toggle("is-active", activePaneId === PLAYER_PANES.PRIMARY);
+  dom.secondaryPlayerPane.classList.toggle("is-active", activePaneId === PLAYER_PANES.SECONDARY);
+  syncPaneMatchHeaders();
+  dom.splitButton.classList.toggle("is-active", splitActive);
+  dom.splitButton.setAttribute("aria-label", splitActive ? "Cambiar ventana activa" : "Agregar segunda pantalla");
+  dom.splitButton.setAttribute("title", splitActive ? "Cambiar ventana activa (V)" : "Agregar segunda pantalla (D)");
+  dom.closeSplitButton.hidden = !splitActive;
+  document.querySelectorAll("[data-activate-pane]").forEach((button) => {
+    const isActivePaneButton = button.dataset.activatePane === activePaneId;
+    button.tabIndex = splitActive ? 0 : -1;
+    button.setAttribute("aria-hidden", String(!splitActive));
+    button.setAttribute("aria-pressed", String(splitActive && isActivePaneButton));
+  });
+}
+
+function closeSecondaryPane(options = {}) {
+  if (dom.secondaryPlayerPane.hidden && !getPaneState(PLAYER_PANES.SECONDARY).sourceKey) {
+    return;
+  }
+
+  dom.secondaryPlayerStage.replaceChildren();
+  dom.secondaryPlayerPane.hidden = true;
+  playerPaneStates[PLAYER_PANES.SECONDARY] = createPaneState();
+  activePaneId = PLAYER_PANES.PRIMARY;
+  channelSwitcherTargetPaneId = "";
+  syncSplitMode();
+  renderChannelSwitcher();
+
+  if (!options.silent) {
+    showChannelToast({
+      sourceName: "Vista doble cerrada",
+      name: "Ventana 1",
+      language: "Reproductor unico",
+      quality: "PC/TV",
+      sourceUrl: getCurrentSource(PLAYER_PANES.PRIMARY),
+    }, PLAYER_PANES.PRIMARY);
+  }
+}
+
+function toggleActivePane() {
+  if (!isSplitMode()) {
+    toggleChannelSwitcher(true, { focus: true, paneId: PLAYER_PANES.SECONDARY });
+    showChannelToast({
+      sourceName: "Elige la segunda pantalla",
+      name: "Vista doble",
+      language: "Selecciona un canal para Ventana 2",
+      quality: "Split",
+      sourceUrl: getCurrentSource(PLAYER_PANES.PRIMARY),
+    }, PLAYER_PANES.PRIMARY);
+    return;
+  }
+
+  setActivePane(activePaneId === PLAYER_PANES.PRIMARY ? PLAYER_PANES.SECONDARY : PLAYER_PANES.PRIMARY);
+}
+
 function renderChannelSwitcher() {
+  const paneId = getSwitcherPaneId();
+  const paneState = getPaneState(paneId);
   const items = getPlayableItems();
   const visibleItems = getVisibleItems(items);
   const worldCupItems = getVisibleItems(getWorldCupItems());
   const streamxItems = getVisibleItems(getStreamxChannelItems());
   const regularItems = getVisibleItems(getRegularItems());
-  const headerSubtitle = currentPlaylist.length
-    ? `${currentPlaylist.length} canales del partido`
+  const headerSubtitle = paneState.playlist.length
+    ? `${paneState.playlist.length} canales del partido · ${getPaneLabel(paneId)}`
     : `${visibleItems.length} fuentes visibles`;
 
   dom.channelSwitcher.replaceChildren();
@@ -1722,14 +2020,14 @@ function renderChannelSwitcher() {
   const switcherHeader = createElement("div", "switcher-header");
   const switcherTitle = createElement("div");
   switcherTitle.append(
-    createElement("strong", "", currentPlaylist.length ? "Canales disponibles" : "Canales"),
+    createElement("strong", "", channelSwitcherTargetPaneId ? `Elegir ${getPaneLabel(paneId)}` : paneState.playlist.length ? `Canales disponibles · ${getPaneLabel(paneId)}` : `Canales · ${getPaneLabel(paneId)}`),
     createElement("span", "", headerSubtitle)
   );
   switcherHeader.append(switcherTitle);
   dom.channelSwitcher.append(switcherHeader);
 
-  if (currentPlaylist.length) {
-    dom.channelSwitcher.append(createItemsSection(currentPlaylistTitle || "Servidores del partido", currentPlaylist, true, "is-event", currentPlaylist));
+  if (paneState.playlist.length) {
+    dom.channelSwitcher.append(createItemsSection(paneState.playlistTitle || "Servidores del partido", paneState.playlist, true, "is-event", paneState.playlist));
   }
 
   if (streamxItems.length) {
@@ -1748,21 +2046,35 @@ function renderChannelSwitcher() {
     }
   });
 
-  updateActiveChannel(getCurrentSource(), currentSourceKey);
+  updateActiveChannel(getCurrentSource(paneId), paneState.sourceKey, paneId);
   syncChannelSwitcherAccessibility();
 }
 
 function toggleChannelSwitcher(force, options = {}) {
   const activeElement = document.activeElement;
+  const wasOpen = dom.channelSwitcher.classList.contains("is-open");
+
+  if (options.paneId) {
+    channelSwitcherTargetPaneId = options.paneId;
+  }
+
   const isOpen = typeof force === "boolean"
     ? dom.channelSwitcher.classList.toggle("is-open", force)
     : dom.channelSwitcher.classList.toggle("is-open");
+
+  if (isOpen && (!wasOpen || options.paneId)) {
+    renderChannelSwitcher();
+  }
 
   dom.channelsButton.setAttribute("aria-expanded", String(isOpen));
   syncChannelSwitcherAccessibility(isOpen);
 
   if (isOpen && (options.focus || isCompactViewport())) {
     focusActiveSwitcherItem();
+  }
+
+  if (!isOpen) {
+    channelSwitcherTargetPaneId = "";
   }
 
   if (!isOpen && isTvMode()) {
@@ -1818,17 +2130,18 @@ function updateActiveChannel(src, sourceKey = "") {
   });
 }
 
-function getCurrentSource() {
-  const frame = dom.playerStage.querySelector("iframe");
+function getCurrentSource(paneId = activePaneId) {
+  const frame = getPaneStage(paneId).querySelector("iframe");
   return frame?.getAttribute("src") || "";
 }
 
-function getCurrentSourceIndex() {
-  const currentSource = getCurrentSource();
-  const items = getNavigationItems();
+function getCurrentSourceIndex(paneId = activePaneId) {
+  const paneState = getPaneState(paneId);
+  const currentSource = getCurrentSource(paneId);
+  const items = getNavigationItems(paneId);
 
-  if (currentSourceKey) {
-    const keyIndex = items.findIndex((item) => getItemKey(item) === currentSourceKey);
+  if (paneState.sourceKey) {
+    const keyIndex = items.findIndex((item) => getItemKey(item) === paneState.sourceKey);
 
     if (keyIndex !== -1) {
       return keyIndex;
@@ -1838,25 +2151,26 @@ function getCurrentSourceIndex() {
   return items.findIndex((item) => item.sourceUrl === currentSource);
 }
 
-function getNavigationItems() {
-  return currentPlaylist.length ? currentPlaylist : getPlayableItems();
+function getNavigationItems(paneId = activePaneId) {
+  const paneState = getPaneState(paneId);
+  return paneState.playlist.length ? paneState.playlist : getPlayableItems();
 }
 
 function getItemKey(item) {
   return item?.sourceKey || item?.sourceUrl || "";
 }
 
-function openItemByOffset(offset) {
-  const items = getNavigationItems();
+function openItemByOffset(offset, paneId = activePaneId) {
+  const items = getNavigationItems(paneId);
 
   if (!items.length) {
     return;
   }
 
-  const currentIndex = getCurrentSourceIndex();
+  const currentIndex = getCurrentSourceIndex(paneId);
   const safeIndex = currentIndex === -1 ? (offset > 0 ? -1 : 0) : currentIndex;
   const nextIndex = (safeIndex + offset + items.length) % items.length;
-  openItem(items[nextIndex], { keepFullscreen: true, announce: true, playlist: items, keepPlaylist: true });
+  openItem(items[nextIndex], { paneId, keepFullscreen: true, keepSplit: true, announce: true, playlist: items, keepPlaylist: true });
 }
 
 function canRunSourceNavigation(event) {
@@ -1986,15 +2300,16 @@ function revealControls() {
   }, CONTROLS_HIDE_DELAY);
 }
 
-function showChannelToast(item) {
+function showChannelToast(item, paneId = activePaneId) {
   if (!item) {
     return;
   }
 
-  const items = getNavigationItems();
+  const items = getNavigationItems(paneId);
   const itemKey = getItemKey(item);
   const itemIndex = items.findIndex((source) => getItemKey(source) === itemKey);
-  const position = itemIndex === -1 ? "" : `Fuente ${itemIndex + 1}/${items.length} · `;
+  const panePrefix = isSplitMode() ? `${getPaneLabel(paneId)} · ` : "";
+  const position = itemIndex === -1 ? panePrefix : `${panePrefix}Fuente ${itemIndex + 1}/${items.length} · `;
 
   window.clearTimeout(toastHideTimer);
 
@@ -2069,12 +2384,24 @@ function handlePlayerPopState() {
     return;
   }
 
+  if (isSplitMode()) {
+    playerHistoryActive = false;
+    closeSecondaryPane();
+    pushPlayerHistoryState();
+    revealControls();
+    return;
+  }
+
   playerHistoryActive = false;
   closePlayer({ fromPopState: true });
 }
 
 async function openPlayer(embed, options = {}) {
   const normalizedEmbed = normalizeEmbed(embed);
+  const paneId = options.paneId || activePaneId;
+  const paneStage = getPaneStage(paneId);
+  const wasHidden = dom.player.hidden;
+  const wasSwitcherOpen = dom.channelSwitcher.classList.contains("is-open");
 
   if (!normalizedEmbed) {
     return;
@@ -2082,13 +2409,24 @@ async function openPlayer(embed, options = {}) {
 
   rememberPlayerReturnFocus();
 
+  if (paneId === PLAYER_PANES.PRIMARY && !options.keepSplit) {
+    closeSecondaryPane({ silent: true });
+  }
+
   const wrapper = document.createElement("div");
   wrapper.innerHTML = normalizedEmbed;
   prepareEmbeds(wrapper);
 
-  currentSourceKey = options.sourceKey || "";
-  dom.playerStage.replaceChildren(...wrapper.childNodes);
-  updateActiveChannel(getEmbedSrc(normalizedEmbed), currentSourceKey);
+  getPaneState(paneId).sourceKey = options.sourceKey || "";
+  paneStage.replaceChildren(...wrapper.childNodes);
+
+  if (paneId === PLAYER_PANES.SECONDARY) {
+    dom.secondaryPlayerPane.hidden = false;
+  }
+
+  setActivePane(paneId, { silent: true });
+  syncSplitMode();
+  updateActiveChannel(getEmbedSrc(normalizedEmbed), getPaneState(paneId).sourceKey, paneId);
   toggleChannelSwitcher(false);
   dom.setupPanel.hidden = true;
   dom.player.hidden = false;
@@ -2098,7 +2436,9 @@ async function openPlayer(embed, options = {}) {
   }
 
   syncTvOverlay();
-  pushPlayerHistoryState();
+  if (wasHidden) {
+    pushPlayerHistoryState();
+  }
 
   if (!options.keepFullscreen && (isTvMode() || options.forceFullscreen)) {
     await enterFullscreen();
@@ -2106,7 +2446,7 @@ async function openPlayer(embed, options = {}) {
 
   if (isTvMode()) {
     focusTvOverlay();
-  } else {
+  } else if (wasHidden || wasSwitcherOpen) {
     window.setTimeout(() => dom.closeButton.focus({ preventScroll: true }), 0);
   }
 
@@ -2114,23 +2454,86 @@ async function openPlayer(embed, options = {}) {
 }
 
 function openItem(item, options = {}) {
+  const paneId = options.paneId || channelSwitcherTargetPaneId || activePaneId;
+  const paneState = getPaneState(paneId);
+  const hasMatchOption = Object.prototype.hasOwnProperty.call(options, "match");
+  const keepSplit = options.keepSplit ?? isSplitMode();
+
   if (Array.isArray(options.playlist)) {
-    currentPlaylist = options.playlist.filter((source) => source && source.sourceUrl);
-    currentPlaylistTitle = options.playlistTitle || currentPlaylistTitle || "Canales disponibles";
+    paneState.playlist = options.playlist.filter((source) => source && source.sourceUrl);
+    paneState.playlistTitle = options.playlistTitle || paneState.playlistTitle || "Canales disponibles";
   } else if (!options.keepPlaylist) {
-    currentPlaylist = getPlayableItems();
-    currentPlaylistTitle = options.playlistTitle || "Biblioteca en vivo";
+    paneState.playlist = getPlayableItems();
+    paneState.playlistTitle = options.playlistTitle || "Biblioteca en vivo";
   }
 
+  if (hasMatchOption) {
+    paneState.match = options.match || null;
+  } else if (!options.keepPlaylist) {
+    paneState.match = null;
+  }
+
+  paneState.item = item;
   renderChannelSwitcher();
 
   const embed = buildIframe(item.sourceUrl, `${item.sourceName} - ${item.name || "Player"}`);
   dom.input.value = embed;
-  openPlayer(embed, { ...options, sourceKey: getItemKey(item) });
+  openPlayer(embed, { ...options, paneId, keepSplit, sourceKey: getItemKey(item) });
 
-  if (options.announce || !dom.player.hidden) {
-    showChannelToast(item);
+  if (!options.silentToast && (options.announce || !dom.player.hidden)) {
+    showChannelToast(item, paneId);
   }
+}
+
+function openSplitEvents(primaryEvent, secondaryEvent) {
+  const primaryServers = primaryEvent.serverItems || getEventServerItems(primaryEvent);
+  const secondaryServers = secondaryEvent.serverItems || getEventServerItems(secondaryEvent);
+
+  if (!primaryServers.length || !secondaryServers.length) {
+    return;
+  }
+
+  openSplitItems(primaryServers[0], secondaryServers[0], {
+    primaryPlaylist: primaryServers,
+    primaryPlaylistTitle: `Servidores de ${primaryEvent.title}`,
+    primaryMatch: primaryEvent,
+    secondaryPlaylist: secondaryServers,
+    secondaryPlaylistTitle: `Servidores de ${secondaryEvent.title}`,
+    secondaryMatch: secondaryEvent,
+  });
+}
+
+function openSplitItems(primaryItem, secondaryItem, options = {}) {
+  const wasHidden = dom.player.hidden;
+
+  openItem(primaryItem, {
+    paneId: PLAYER_PANES.PRIMARY,
+    playlist: options.primaryPlaylist || [primaryItem],
+    playlistTitle: options.primaryPlaylistTitle || "Ventana 1",
+    match: options.primaryMatch || null,
+    keepSplit: true,
+    keepFullscreen: !wasHidden,
+    silentToast: true,
+  });
+
+  openItem(secondaryItem, {
+    paneId: PLAYER_PANES.SECONDARY,
+    playlist: options.secondaryPlaylist || [secondaryItem],
+    playlistTitle: options.secondaryPlaylistTitle || "Ventana 2",
+    match: options.secondaryMatch || null,
+    keepSplit: true,
+    keepFullscreen: true,
+    silentToast: true,
+  });
+
+  setActivePane(PLAYER_PANES.PRIMARY, { silent: true });
+  showChannelToast({
+    sourceName: "Vista doble activa",
+    name: "Dos partidos al mismo tiempo",
+    language: getPaneState(PLAYER_PANES.PRIMARY).item?.name || "Ventana 1",
+    quality: getPaneState(PLAYER_PANES.SECONDARY).item?.name || "Ventana 2",
+    sourceUrl: getCurrentSource(PLAYER_PANES.PRIMARY),
+  }, PLAYER_PANES.PRIMARY);
 }
 
 async function closePlayer(options = {}) {
@@ -2142,11 +2545,15 @@ async function closePlayer(options = {}) {
   dom.player.hidden = true;
   dom.setupPanel.hidden = false;
   dom.playerStage.replaceChildren();
+  dom.secondaryPlayerStage.replaceChildren();
+  dom.secondaryPlayerPane.hidden = true;
   dom.player.classList.remove("is-idle", "is-fullscreen");
   dom.channelToast.classList.remove("is-visible");
-  currentPlaylist = [];
-  currentPlaylistTitle = "";
-  currentSourceKey = "";
+  playerPaneStates[PLAYER_PANES.PRIMARY] = createPaneState();
+  playerPaneStates[PLAYER_PANES.SECONDARY] = createPaneState();
+  activePaneId = PLAYER_PANES.PRIMARY;
+  channelSwitcherTargetPaneId = "";
+  syncSplitMode();
   renderChannelSwitcher();
   syncTvOverlay();
   window.clearTimeout(toastHideTimer);
@@ -2161,6 +2568,12 @@ async function handleBackNavigation() {
 
   if (dom.channelSwitcher.classList.contains("is-open")) {
     toggleChannelSwitcher(false);
+    revealControls();
+    return;
+  }
+
+  if (isSplitMode()) {
+    closeSecondaryPane();
     revealControls();
     return;
   }
@@ -2381,21 +2794,27 @@ function handlePlayerRemoteAction(event, action) {
 
   if (action === "menu") {
     event.preventDefault();
-    toggleChannelSwitcher(undefined, { focus: true });
+    toggleChannelSwitcher(undefined, { focus: true, paneId: activePaneId });
     revealControls();
     return true;
   }
 
   if (action === "ok" && isTvMode()) {
     event.preventDefault();
-    toggleChannelSwitcher(true, { focus: true });
+    toggleChannelSwitcher(true, { focus: true, paneId: activePaneId });
     revealControls();
     return true;
   }
 
   if (["up", "down"].includes(action) && isTvMode()) {
     event.preventDefault();
-    toggleChannelSwitcher(true, { focus: true });
+
+    if (isSplitMode()) {
+      setActivePane(activePaneId === PLAYER_PANES.PRIMARY ? PLAYER_PANES.SECONDARY : PLAYER_PANES.PRIMARY);
+    } else {
+      toggleChannelSwitcher(true, { focus: true, paneId: activePaneId });
+    }
+
     revealControls();
     return true;
   }
@@ -2404,7 +2823,7 @@ function handlePlayerRemoteAction(event, action) {
     event.preventDefault();
 
     if (canRunSourceNavigation(event)) {
-      openItemByOffset(1);
+      openItemByOffset(1, dom.channelSwitcher.classList.contains("is-open") ? getSwitcherPaneId() : activePaneId);
     }
 
     revealControls();
@@ -2415,7 +2834,7 @@ function handlePlayerRemoteAction(event, action) {
     event.preventDefault();
 
     if (canRunSourceNavigation(event)) {
-      openItemByOffset(-1);
+      openItemByOffset(-1, dom.channelSwitcher.classList.contains("is-open") ? getSwitcherPaneId() : activePaneId);
     }
 
     revealControls();
@@ -2537,12 +2956,26 @@ function bindEvents() {
   });
 
   dom.fullscreenButton.addEventListener("click", toggleFullscreen);
+  dom.splitButton.addEventListener("click", () => {
+    toggleActivePane();
+    revealControls();
+  });
+  dom.closeSplitButton.addEventListener("click", () => {
+    closeSecondaryPane();
+    revealControls();
+  });
   dom.modeToggleButton.addEventListener("click", togglePlayerMode);
   dom.iframeControlButton.addEventListener("click", toggleIframeControl);
   dom.closeButton.addEventListener("click", handleBackNavigation);
   dom.channelsButton.addEventListener("click", () => {
-    toggleChannelSwitcher(undefined, { focus: isTvMode() });
+    toggleChannelSwitcher(undefined, { focus: isTvMode(), paneId: activePaneId });
     revealControls();
+  });
+  document.querySelectorAll("[data-activate-pane]").forEach((button) => {
+    button.addEventListener("click", () => {
+      setActivePane(button.dataset.activatePane);
+      revealControls();
+    });
   });
   dom.channelSearch.addEventListener("input", () => {
     searchTerm = normalizeText(dom.channelSearch.value.trim());
@@ -2552,7 +2985,7 @@ function bindEvents() {
   dom.player.addEventListener("pointerdown", revealControls);
   dom.player.addEventListener("touchstart", revealControls, { passive: true });
   dom.tvOverlay.addEventListener("click", () => {
-    toggleChannelSwitcher(true, { focus: true });
+    toggleChannelSwitcher(true, { focus: true, paneId: activePaneId });
     revealControls();
   });
   dom.channelSwitcher.addEventListener("keydown", (event) => {
@@ -2602,7 +3035,21 @@ function bindEvents() {
 
     if (["c", "C"].includes(event.key)) {
       event.preventDefault();
-      toggleChannelSwitcher(undefined, { focus: isTvMode() });
+      toggleChannelSwitcher(undefined, { focus: isTvMode(), paneId: activePaneId });
+      revealControls();
+      return;
+    }
+
+    if (["d", "D"].includes(event.key)) {
+      event.preventDefault();
+      toggleActivePane();
+      revealControls();
+      return;
+    }
+
+    if (["v", "V"].includes(event.key) && isSplitMode()) {
+      event.preventDefault();
+      toggleActivePane();
       revealControls();
       return;
     }
@@ -2623,7 +3070,7 @@ function bindEvents() {
     if (["ArrowRight", "PageDown", "n", "N"].includes(event.key)) {
       event.preventDefault();
       if (canRunSourceNavigation(event)) {
-        openItemByOffset(1);
+        openItemByOffset(1, dom.channelSwitcher.classList.contains("is-open") ? getSwitcherPaneId() : activePaneId);
       }
       revealControls();
       return;
@@ -2632,7 +3079,7 @@ function bindEvents() {
     if (["ArrowLeft", "PageUp", "p", "P"].includes(event.key)) {
       event.preventDefault();
       if (canRunSourceNavigation(event)) {
-        openItemByOffset(-1);
+        openItemByOffset(-1, dom.channelSwitcher.classList.contains("is-open") ? getSwitcherPaneId() : activePaneId);
       }
       revealControls();
       return;
@@ -2649,6 +3096,7 @@ setPlayerMode(playerMode, { persist: false });
 renderAgenda();
 renderChannels();
 bindEvents();
+syncSplitMode();
 syncFullscreenButton();
 loadStreamxData();
 startAutoRefresh();
