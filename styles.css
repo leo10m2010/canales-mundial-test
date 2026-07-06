@@ -1915,6 +1915,27 @@ textarea:focus {
     color: rgba(7, 8, 7, 0.68);
   }
 
+  .agenda-sport-button.is-featured:hover {
+    color: #f8f3df;
+    background: linear-gradient(135deg, #071a3f 0%, #0b2f6b 38%, #c8102e 68%, #007a3d 100%);
+    border-color: rgba(248, 243, 223, 0.72);
+    box-shadow: 0 0 0 4px rgba(248, 243, 223, 0.1), 0 18px 48px rgba(7, 26, 63, 0.34);
+  }
+
+  .agenda-sport-button.is-featured:hover .sport-icon {
+    color: #f8f3df;
+    background: rgba(7, 26, 63, 0.46);
+    border-color: rgba(248, 243, 223, 0.28);
+  }
+
+  .agenda-sport-button.is-featured:hover .tab-count {
+    color: rgba(248, 243, 223, 0.78);
+  }
+
+  .agenda-sport-button.is-featured:hover .featured-tag {
+    color: #071a3f;
+  }
+
   .server-chip:not(:disabled):hover,
   .watch-button:not(:disabled):hover {
     color: var(--black);
