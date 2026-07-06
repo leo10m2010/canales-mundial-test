@@ -1,9 +1,10 @@
 {
   "name": "Player Embed",
   "short_name": "Player",
-  "start_url": "./",
+  "start_url": "./?mode=tv",
   "scope": "./",
-  "display": "standalone",
+  "display": "fullscreen",
+  "orientation": "landscape",
   "background_color": "#000000",
   "theme_color": "#070807",
   "lang": "es",

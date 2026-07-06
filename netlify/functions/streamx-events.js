@@ -1,6 +1,7 @@
-const SOURCE_URL = "https://stream-xhd.com/eventos.json";
+const SOURCE_URL = "https://streamx-hd.com/eventos.json";
 const CACHE_MAX_AGE = 60;
 const STALE_WHILE_REVALIDATE = 300;
+const ERROR_CACHE_CONTROL = "no-store";
 const MEMORY_TTL_MS = CACHE_MAX_AGE * 1000;
 const REQUEST_TIMEOUT_MS = 8000;
 const STALE_REQUEST_TIMEOUT_MS = 3000;
@@ -21,6 +22,28 @@ function makeHeaders(extra = {}) {
     "cache-control": `public, max-age=0, s-maxage=${CACHE_MAX_AGE}, stale-while-revalidate=${STALE_WHILE_REVALIDATE}`,
     ...extra,
   };
+}
+
+function makeErrorHeaders(extra = {}) {
+  return {
+    ...BASE_HEADERS,
+    "cache-control": ERROR_CACHE_CONTROL,
+    ...extra,
+  };
+}
+
+function validateSourceBody(body) {
+  try {
+    const data = JSON.parse(body);
+
+    if (!data || !Array.isArray(data.sports)) {
+      throw new Error("invalid_streamx_events_schema");
+    }
+  } catch (error) {
+    const parseError = new Error("streamx_events_invalid_json");
+    parseError.status = 502;
+    throw parseError;
+  }
 }
 
 function hasForceRefresh(event) {
@@ -52,6 +75,8 @@ async function fetchSource(timeoutMs) {
       throw error;
     }
 
+    validateSourceBody(body);
+
     cachedBody = body;
     cachedAt = Date.now();
 
@@ -64,6 +89,14 @@ async function fetchSource(timeoutMs) {
 exports.handler = async (event) => {
   if (event.httpMethod === "OPTIONS") {
     return { statusCode: 204, headers: makeHeaders(), body: "" };
+  }
+
+  if (event.httpMethod !== "GET") {
+    return {
+      statusCode: 405,
+      headers: makeErrorHeaders({ allow: "GET, OPTIONS" }),
+      body: JSON.stringify({ error: "method_not_allowed" }),
+    };
   }
 
   const forceRefresh = hasForceRefresh(event);
@@ -96,7 +129,7 @@ exports.handler = async (event) => {
 
     return {
       statusCode: error.name === "AbortError" ? 504 : (error.status || 502),
-      headers: makeHeaders({ "x-cache": "miss" }),
+      headers: makeErrorHeaders({ "x-cache": "miss" }),
       body: JSON.stringify({ error: error.name === "AbortError" ? "streamx_events_timeout" : "streamx_events_unreachable" }),
     };
   }

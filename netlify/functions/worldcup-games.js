@@ -1,6 +1,7 @@
 const SOURCE_URL = "https://worldcup26.ir/get/games";
 const CACHE_MAX_AGE = 30;
 const STALE_WHILE_REVALIDATE = 300;
+const ERROR_CACHE_CONTROL = "no-store";
 const MEMORY_TTL_MS = CACHE_MAX_AGE * 1000;
 const REQUEST_TIMEOUT_MS = 6500;
 const STALE_REQUEST_TIMEOUT_MS = 2500;
@@ -21,6 +22,28 @@ function makeHeaders(extra = {}) {
     "cache-control": `public, max-age=0, s-maxage=${CACHE_MAX_AGE}, stale-while-revalidate=${STALE_WHILE_REVALIDATE}`,
     ...extra,
   };
+}
+
+function makeErrorHeaders(extra = {}) {
+  return {
+    ...BASE_HEADERS,
+    "cache-control": ERROR_CACHE_CONTROL,
+    ...extra,
+  };
+}
+
+function validateSourceBody(body) {
+  try {
+    const data = JSON.parse(body);
+
+    if (!Array.isArray(data) && !Array.isArray(data?.games)) {
+      throw new Error("invalid_worldcup_games_schema");
+    }
+  } catch (error) {
+    const parseError = new Error("worldcup_games_invalid_json");
+    parseError.status = 502;
+    throw parseError;
+  }
 }
 
 function hasForceRefresh(event) {
@@ -52,6 +75,8 @@ async function fetchSource(timeoutMs) {
       throw error;
     }
 
+    validateSourceBody(body);
+
     cachedBody = body;
     cachedAt = Date.now();
 
@@ -64,6 +89,14 @@ async function fetchSource(timeoutMs) {
 exports.handler = async (event) => {
   if (event.httpMethod === "OPTIONS") {
     return { statusCode: 204, headers: makeHeaders(), body: "" };
+  }
+
+  if (event.httpMethod !== "GET") {
+    return {
+      statusCode: 405,
+      headers: makeErrorHeaders({ allow: "GET, OPTIONS" }),
+      body: JSON.stringify({ error: "method_not_allowed" }),
+    };
   }
 
   const forceRefresh = hasForceRefresh(event);
@@ -96,7 +129,7 @@ exports.handler = async (event) => {
 
     return {
       statusCode: error.name === "AbortError" ? 504 : (error.status || 502),
-      headers: makeHeaders({ "x-cache": "miss" }),
+      headers: makeErrorHeaders({ "x-cache": "miss" }),
       body: JSON.stringify({ error: error.name === "AbortError" ? "worldcup_games_timeout" : "worldcup_games_unreachable" }),
     };
   }

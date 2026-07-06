@@ -18,11 +18,11 @@ La agenda usa Netlify Functions para evitar CORS. Con `start-server.bat` la bibl
 
 - `index.html`: estructura de la pagina.
 - `styles.css`: interfaz, player y responsive.
-- `channels.js`: lista editable de canales.
+- `channels.js`: lista editable de respaldo. Por defecto esta vacia porque los canales vienen de StreamX-HD.
 - `script.js`: renderizado, cambio de canales y fullscreen.
 - `netlify/functions/worldcup-games.js`: proxy de marcador y resultados World Cup.
-- `netlify/functions/streamx-events.js`: proxy de agenda Stream-XHD.
-- `netlify/functions/streamx-channels.js`: proxy de canales 24/7 Stream-XHD.
+- `netlify/functions/streamx-events.js`: proxy de agenda StreamX-HD.
+- `netlify/functions/streamx-channels.js`: proxy de canales 24/7 StreamX-HD.
 
 El embed manual acepta URLs directas o iframes con `src`.
 
@@ -30,7 +30,7 @@ El embed manual acepta URLs directas o iframes con `src`.
 
 - `PC`: modo por defecto en computadora. Abre el player sin fullscreen automatico y deja el iframe libre para mouse/teclado.
 - `TV`: intenta fullscreen al reproducir y activa un overlay para que el control remoto no lo robe el iframe.
-- En `TV`, el inicio enfoca partidos/canales y se navega con flechas.
+- En `TV`, el inicio enfoca eventos/canales y se navega con flechas.
 - Puedes forzar modo con `?mode=pc` o `?mode=tv`.
 - En Android TV/Xiaomi TV Box se detectan teclas D-pad por `key`, `code` y `keyCode`.
 - Si el navegador no reporta bien el dispositivo, al detectar un control remoto se activa modo TV automaticamente.
@@ -39,13 +39,13 @@ El embed manual acepta URLs directas o iframes con `src`.
 ## Datos y actualizacion
 
 - Marcador, estado y resultados: `worldcup26.ir/get/games`.
-- Canales por partido: `stream-xhd.com/eventos.json`.
-- Canales 24/7: `stream-xhd.com/canales/canales.json`.
+- Canales por evento: `streamx-hd.com/eventos.json`.
+- Canales 24/7: `streamx-hd.com/canales/canales.json`.
 - Marcador: se actualiza cada 30 segundos si hay partido en vivo, cada 60 segundos si un partido esta por empezar y cada 5 minutos en reposo.
 - Servidores de agenda: se actualizan cada 2 minutos.
 - Canales 24/7: se actualizan cada 10 minutos.
-- La agenda se pinta apenas llega Stream-XHD; el marcador World Cup se agrega despues si la API responde lento.
-- Por defecto se muestran solo los partidos del dia seleccionado. Si hoy no hay partidos, se abre el proximo dia disponible.
+- La agenda se pinta apenas llega StreamX-HD; el marcador World Cup solo enriquece los partidos del Mundial que ya vengan en StreamX-HD.
+- Por defecto se muestran solo los eventos del dia seleccionado. Si hoy no hay eventos, se abre el proximo dia disponible.
 - Al volver a la pestana o app, solo se actualizan las fuentes que ya esten vencidas.
 - El boton `Actualizar agenda` fuerza una lectura nueva y evita el cache normal.
 
@@ -72,4 +72,4 @@ En modo TV, la navegacion usa foco espacial: las flechas saltan al boton visualm
 
 ## Netlify
 
-La carpeta ya incluye `netlify.toml`. Sube esta carpeta como sitio estatico. Netlify publicara `.` y usara `netlify/functions` para los proxies Stream-XHD.
+La carpeta ya incluye `netlify.toml`. Sube esta carpeta como sitio estatico. Netlify publicara `.` y usara `netlify/functions` para los proxies StreamX-HD.
