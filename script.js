@@ -184,6 +184,7 @@ let worldcupError = "";
 let sportsDbError = "";
 let streamxDataLoading = false;
 let selectedAgendaDate = "";
+let agendaDateManuallySelected = false;
 let selectedAgendaSport = "all";
 let lastWorldcupLoadedAt = 0;
 let lastStreamxLoadedAt = 0;
@@ -1434,20 +1435,22 @@ function getAvailableAgendaDates(events) {
 
 function ensureSelectedAgendaDate(events) {
   const dates = getAvailableAgendaDates(events);
+  const today = getPeruDateKey();
 
   if (!dates.length) {
     selectedAgendaDate = "";
+    agendaDateManuallySelected = false;
     return dates;
   }
 
-  if (dates.includes(selectedAgendaDate)) {
+  if (agendaDateManuallySelected && dates.includes(selectedAgendaDate)) {
     return dates;
   }
 
-  const today = getPeruDateKey();
   selectedAgendaDate = dates.includes(today)
     ? today
     : dates.find((dateKey) => dateKey > today) || dates[0];
+  agendaDateManuallySelected = false;
 
   return dates;
 }
@@ -1509,6 +1512,7 @@ function renderAgendaDateTabs(dates, events) {
     const count = counts.get(dateKey) || 0;
     const button = createElement("button", "agenda-date-button");
     button.type = "button";
+    button.dataset.agendaDate = dateKey;
     button.dataset.tvFocusKey = `agenda-date:${dateKey}`;
     button.classList.toggle("is-active", dateKey === selectedAgendaDate);
     button.setAttribute("aria-pressed", String(dateKey === selectedAgendaDate));
@@ -1518,9 +1522,23 @@ function renderAgendaDateTabs(dates, events) {
     );
     button.addEventListener("click", () => {
       selectedAgendaDate = dateKey;
+      agendaDateManuallySelected = true;
       renderAgenda();
     });
     dom.agendaDateTabs.append(button);
+  });
+
+  centerSelectedAgendaDateTab();
+}
+
+function centerSelectedAgendaDateTab() {
+  if (!selectedAgendaDate || dom.agendaDateTabs.hidden) {
+    return;
+  }
+
+  window.requestAnimationFrame(() => {
+    const activeButton = dom.agendaDateTabs.querySelector(".agenda-date-button.is-active");
+    activeButton?.scrollIntoView({ block: "nearest", inline: "center" });
   });
 }
 
@@ -1614,6 +1632,8 @@ function renderAgendaSportTabs(sports, events, worldcupEvents = []) {
     );
     button.addEventListener("click", () => {
       selectedAgendaSport = sport.key;
+      selectedAgendaDate = "";
+      agendaDateManuallySelected = false;
       renderAgenda();
     });
     dom.agendaSportTabs.append(button);
@@ -2297,10 +2317,6 @@ function enableHorizontalDragScroll(container) {
       return;
     }
 
-    if (event.target.closest("button")) {
-      return;
-    }
-
     pointerId = event.pointerId;
     startX = event.clientX;
     startScrollLeft = container.scrollLeft;
@@ -2315,7 +2331,7 @@ function enableHorizontalDragScroll(container) {
 
     const deltaX = event.clientX - startX;
 
-    if (Math.abs(deltaX) > 4) {
+    if (Math.abs(deltaX) > 8) {
       dragged = true;
       container.scrollLeft = startScrollLeft - deltaX;
       event.preventDefault();
@@ -2338,6 +2354,21 @@ function enableHorizontalDragScroll(container) {
       dragged = false;
     }
   }, true);
+
+  container.addEventListener("wheel", (event) => {
+    if (container.scrollWidth <= container.clientWidth) {
+      return;
+    }
+
+    const delta = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+
+    if (!delta) {
+      return;
+    }
+
+    container.scrollLeft += delta;
+    event.preventDefault();
+  }, { passive: false });
 }
 
 function createPaneTeam(teamName, logo) {

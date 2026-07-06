@@ -439,6 +439,8 @@ kbd {
   scroll-snap-type: x proximity;
   -webkit-overflow-scrolling: touch;
   cursor: grab;
+  touch-action: pan-x;
+  user-select: none;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
