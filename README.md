@@ -23,6 +23,7 @@ La agenda usa Netlify Functions para evitar CORS. Con `start-server.bat` la bibl
 - `netlify/functions/worldcup-games.js`: proxy de marcador y resultados World Cup.
 - `netlify/functions/streamx-events.js`: proxy de agenda StreamX-HD.
 - `netlify/functions/streamx-channels.js`: proxy de canales 24/7 StreamX-HD.
+- `netlify/functions/thesportsdb-events.js`: proxy de eventos y marcadores por fecha TheSportsDB.
 
 El embed manual acepta URLs directas o iframes con `src`.
 
@@ -41,10 +42,13 @@ El embed manual acepta URLs directas o iframes con `src`.
 - Marcador, estado y resultados: `worldcup26.ir/get/games`.
 - Canales por evento: `streamx-hd.com/eventos.json`.
 - Canales 24/7: `streamx-hd.com/canales/canales.json`.
+- Marcadores adicionales: `thesportsdb.com/api/v1/json/123/eventsday.php`.
+- Puedes definir `THESPORTSDB_API_KEY` en Netlify; si no existe se usa la key publica `123`.
 - Marcador: se actualiza cada 30 segundos si hay partido en vivo, cada 60 segundos si un partido esta por empezar y cada 5 minutos en reposo.
 - Servidores de agenda: se actualizan cada 2 minutos.
 - Canales 24/7: se actualizan cada 10 minutos.
-- La agenda se pinta apenas llega StreamX-HD; el marcador World Cup solo enriquece los partidos del Mundial que ya vengan en StreamX-HD.
+- La agenda se pinta apenas llega StreamX-HD; TheSportsDB y World Cup API enriquecen marcadores cuando hay coincidencia.
+- El filtro `Mundial` usa World Cup API para mostrar tambien partidos y fechas que aun no tengan servidor StreamX-HD.
 - Por defecto se muestran solo los eventos del dia seleccionado. Si hoy no hay eventos, se abre el proximo dia disponible.
 - Al volver a la pestana o app, solo se actualizan las fuentes que ya esten vencidas.
 - El boton `Actualizar agenda` fuerza una lectura nueva y evita el cache normal.

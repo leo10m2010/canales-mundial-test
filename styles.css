@@ -423,7 +423,8 @@ kbd {
   border-color: rgba(255, 107, 53, 0.36);
 }
 
-.agenda-date-tabs {
+.agenda-date-tabs,
+.agenda-sport-tabs {
   display: flex;
   gap: 8px;
   margin: 0 0 14px;
@@ -433,15 +434,18 @@ kbd {
   -ms-overflow-style: none;
 }
 
-.agenda-date-tabs[hidden] {
+.agenda-date-tabs[hidden],
+.agenda-sport-tabs[hidden] {
   display: none;
 }
 
-.agenda-date-tabs::-webkit-scrollbar {
+.agenda-date-tabs::-webkit-scrollbar,
+.agenda-sport-tabs::-webkit-scrollbar {
   display: none;
 }
 
-.agenda-date-button {
+.agenda-date-button,
+.agenda-sport-button {
   flex: 0 0 auto;
   min-height: 52px;
   padding: 8px 13px;
@@ -453,16 +457,20 @@ kbd {
 }
 
 .agenda-date-button strong,
-.agenda-date-button span {
+.agenda-date-button span,
+.agenda-sport-button strong,
+.agenda-sport-button span {
   display: block;
 }
 
-.agenda-date-button strong {
+.agenda-date-button strong,
+.agenda-sport-button strong {
   font-size: 0.78rem;
   line-height: 1.15;
 }
 
-.agenda-date-button span {
+.agenda-date-button span,
+.agenda-sport-button span {
   margin-top: 4px;
   color: var(--muted);
   font-size: 0.66rem;
@@ -472,14 +480,18 @@ kbd {
 }
 
 .agenda-date-button.is-active,
-.agenda-date-button:focus-visible {
+.agenda-date-button:focus-visible,
+.agenda-sport-button.is-active,
+.agenda-sport-button:focus-visible {
   color: var(--black);
   background: var(--signal);
   border-color: var(--signal);
 }
 
 .agenda-date-button.is-active span,
-.agenda-date-button:focus-visible span {
+.agenda-date-button:focus-visible span,
+.agenda-sport-button.is-active span,
+.agenda-sport-button:focus-visible span {
   color: rgba(7, 8, 7, 0.68);
 }
 
@@ -1693,13 +1705,15 @@ textarea:focus {
     border-color: var(--signal);
   }
 
-  .agenda-date-button:hover {
+  .agenda-date-button:hover,
+  .agenda-sport-button:hover {
     color: var(--black);
     background: var(--signal);
     border-color: var(--signal);
   }
 
-  .agenda-date-button:hover span {
+  .agenda-date-button:hover span,
+  .agenda-sport-button:hover span {
     color: rgba(7, 8, 7, 0.68);
   }
 
@@ -1840,7 +1854,8 @@ body.is-tv-mode .server-chip {
   font-size: 0.82rem;
 }
 
-body.is-tv-mode .agenda-date-button {
+body.is-tv-mode .agenda-date-button,
+body.is-tv-mode .agenda-sport-button {
   min-height: 62px;
   padding: 10px 16px;
 }
@@ -2109,7 +2124,8 @@ body.is-tv-mode .watch-button {
     padding: 16px 14px 12px;
   }
 
-  body.is-tv-mode .agenda-date-button {
+  body.is-tv-mode .agenda-date-button,
+  body.is-tv-mode .agenda-sport-button {
     min-height: 52px;
   }
 
