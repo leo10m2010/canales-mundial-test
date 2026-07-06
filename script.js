@@ -2297,6 +2297,10 @@ function enableHorizontalDragScroll(container) {
       return;
     }
 
+    if (event.target.closest("button")) {
+      return;
+    }
+
     pointerId = event.pointerId;
     startX = event.clientX;
     startScrollLeft = container.scrollLeft;
