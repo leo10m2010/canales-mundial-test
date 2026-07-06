@@ -246,6 +246,7 @@ h1 {
 
 .embed-form {
   position: relative;
+  min-width: 0;
   padding: clamp(18px, 3vw, 30px);
   background: var(--panel);
   border: 1px solid var(--line);
@@ -279,6 +280,7 @@ label {
 }
 
 .presets {
+  min-width: 0;
   margin-bottom: 18px;
 }
 
@@ -388,6 +390,7 @@ kbd {
 }
 
 .agenda {
+  min-width: 0;
   margin-bottom: 26px;
   padding-bottom: 26px;
   border-bottom: 1px solid rgba(245, 241, 223, 0.14);
@@ -427,11 +430,22 @@ kbd {
 .agenda-sport-tabs {
   display: flex;
   gap: 8px;
+  max-width: 100%;
+  min-width: 0;
   margin: 0 0 14px;
-  padding-bottom: 2px;
+  padding: 0 2px 6px 0;
   overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+  cursor: grab;
   scrollbar-width: none;
   -ms-overflow-style: none;
+}
+
+.agenda-date-tabs:active,
+.agenda-sport-tabs:active {
+  cursor: grabbing;
 }
 
 .agenda-date-tabs[hidden],
@@ -447,12 +461,14 @@ kbd {
 .agenda-date-button,
 .agenda-sport-button {
   flex: 0 0 auto;
+  scroll-snap-align: start;
   min-height: 52px;
   padding: 8px 13px;
   color: var(--ink);
   background: rgba(0, 0, 0, 0.32);
   border: 1px solid rgba(245, 241, 223, 0.14);
   border-radius: 18px;
+  cursor: pointer;
   text-align: left;
 }
 
@@ -497,7 +513,7 @@ kbd {
 
 .agenda-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 14px;
 }
 
@@ -535,6 +551,8 @@ kbd {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  min-width: 0;
+  flex-wrap: wrap;
 }
 
 .match-league,
@@ -554,8 +572,15 @@ kbd {
   color: var(--muted);
 }
 
+.match-league,
+.match-detail,
+.team-name {
+  overflow-wrap: anywhere;
+}
+
 .match-status,
 .match-time {
+  flex: 0 0 auto;
   color: var(--black);
   background: var(--signal);
   border-radius: 999px;
@@ -1839,7 +1864,7 @@ body.is-tv-mode .custom-embed {
 }
 
 body.is-tv-mode .agenda-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
 }
 
 body.is-tv-mode .match-card {

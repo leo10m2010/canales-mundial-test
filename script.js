@@ -47,6 +47,25 @@ if (missingElement) {
 const CHANNELS = window.PLAYER_CHANNELS || [];
 const LANGUAGES = ["Español", "English"];
 const WORLDCUP_CATEGORY = "worldcup";
+const DEFAULT_AGENDA_SPORTS = [
+  { key: "soccer", label: "Futbol" },
+  { key: "mma", label: "UFC / MMA" },
+  { key: "boxing", label: "Boxeo" },
+  { key: "combat", label: "Peleas" },
+  { key: "baseball", label: "Beisbol" },
+  { key: "basketball", label: "Basquet" },
+  { key: "tennis", label: "Tenis" },
+  { key: "motorsport", label: "Motor" },
+  { key: "american-football", label: "NFL" },
+  { key: "volleyball", label: "Voley" },
+  { key: "rugby", label: "Rugby" },
+  { key: "hockey", label: "Hockey" },
+  { key: "golf", label: "Golf" },
+  { key: "cycling", label: "Ciclismo" },
+  { key: "wrestling", label: "Lucha" },
+  { key: "cricket", label: "Cricket" },
+  { key: "esports", label: "eSports" },
+];
 const STREAMX_CHANNEL_CATEGORY = "streamx-247";
 const STREAMX_EVENT_CATEGORY = "streamx-event";
 const STREAMX_EVENTS_URL = "/.netlify/functions/streamx-events";
@@ -1019,18 +1038,58 @@ function findSportsDbEventForEvent(event) {
 function getSportKey(value) {
   const text = normalizeText(value).replace(/[^a-z0-9]+/g, " ").trim();
   const aliases = {
-    football: "soccer",
     futbol: "soccer",
+    football: "soccer",
     soccer: "soccer",
+    beisbol: "baseball",
     baseball: "baseball",
+    basquet: "basketball",
+    basquetbol: "basketball",
     basketball: "basketball",
+    tenis: "tennis",
     tennis: "tennis",
+    ciclismo: "cycling",
     cycling: "cycling",
+    box: "boxing",
+    boxeo: "boxing",
+    boxing: "boxing",
+    ufc: "mma",
+    mma: "mma",
+    "mixed martial arts": "mma",
+    "artes marciales mixtas": "mma",
+    fight: "combat",
+    fights: "combat",
+    fighting: "combat",
+    pelea: "combat",
+    peleas: "combat",
+    combat: "combat",
+    "combat sports": "combat",
+    "deportes de combate": "combat",
+    nfl: "american-football",
+    "american football": "american-football",
+    "futbol americano": "american-football",
     motor: "motorsport",
     motorsport: "motorsport",
+    automovilismo: "motorsport",
+    f1: "motorsport",
+    "formula 1": "motorsport",
+    nascar: "motorsport",
+    voley: "volleyball",
+    volleyball: "volleyball",
+    voleibol: "volleyball",
+    rugby: "rugby",
+    hockey: "hockey",
+    "ice hockey": "hockey",
+    golf: "golf",
+    wrestling: "wrestling",
+    lucha: "wrestling",
+    "lucha libre": "wrestling",
+    cricket: "cricket",
+    esports: "esports",
+    "e sports": "esports",
   };
 
-  return aliases[text] || text;
+  return aliases[text] || text.replace(/\s+/g, "-");
 }
 
 function normalizeMatchTitle(value) {
@@ -1475,6 +1534,11 @@ function getAgendaSportKey(event) {
 
 function getAvailableAgendaSports(events) {
   const map = new Map();
+  const defaultOrder = new Map(DEFAULT_AGENDA_SPORTS.map((sport, index) => [sport.key, index]));
+
+  DEFAULT_AGENDA_SPORTS.forEach((sport) => {
+    map.set(sport.key, { ...sport, count: 0 });
+  });
 
   events.forEach((event) => {
     const key = getAgendaSportKey(event);
@@ -1486,7 +1550,17 @@ function getAvailableAgendaSports(events) {
     map.get(key).count += 1;
   });
 
-  return Array.from(map.values()).sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+  return Array.from(map.values()).sort((a, b) => {
+    const countDiff = b.count - a.count;
+
+    if (countDiff) {
+      return countDiff;
+    }
+
+    const orderDiff = (defaultOrder.get(a.key) ?? Number.MAX_SAFE_INTEGER) - (defaultOrder.get(b.key) ?? Number.MAX_SAFE_INTEGER);
+
+    return orderDiff || a.label.localeCompare(b.label);
+  });
 }
 
 function ensureSelectedAgendaSport(events, worldcupEvents = []) {
@@ -1577,6 +1651,12 @@ function renderAgenda() {
     setAgendaStatus(selectedAgendaSport === WORLDCUP_CATEGORY
       ? "No hay partidos del Mundial disponibles desde la API ahora mismo."
       : "No hay eventos de StreamX-HD disponibles ahora mismo.", false, true);
+    return;
+  }
+
+  if (!sportAgendaEvents.length && selectedAgendaSport !== "all" && selectedAgendaSport !== WORLDCUP_CATEGORY) {
+    const sportLabel = availableAgendaSports.find((sport) => sport.key === selectedAgendaSport)?.label || "este deporte";
+    setAgendaStatus(`No hay eventos de ${sportLabel} disponibles ahora mismo.`, false, true);
     return;
   }
 
@@ -1827,12 +1907,7 @@ function formatAgendaEndTime(event) {
   const duration = Number(event.duration || 130) + Number(event.extraTime || 0);
   const end = new Date(start.getTime() + duration * 60000);
 
-  return new Intl.DateTimeFormat("es-PE", {
-    timeZone: PERU_TIME_ZONE,
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(end);
+  return formatPeruTime(end);
 }
 
 function formatAgendaTime(event) {
@@ -1842,12 +1917,7 @@ function formatAgendaTime(event) {
     return "Horario pendiente";
   }
 
-  return new Intl.DateTimeFormat("es-PE", {
-    timeZone: PERU_TIME_ZONE,
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(date);
+  return formatPeruTime(date);
 }
 
 function formatAgendaDate(event) {
@@ -2052,11 +2122,15 @@ function formatStreamxTime(event) {
     return "Horario pendiente";
   }
 
-  return new Intl.DateTimeFormat("es-PE", {
+  return formatPeruTime(date);
+}
+
+function formatPeruTime(date) {
+  return new Intl.DateTimeFormat("en-US", {
     timeZone: PERU_TIME_ZONE,
-    hour: "2-digit",
+    hour: "numeric",
     minute: "2-digit",
-    hour12: false,
+    hour12: true,
   }).format(date);
 }
 
@@ -2210,6 +2284,56 @@ function createElement(tagName, className, text) {
   }
 
   return element;
+}
+
+function enableHorizontalDragScroll(container) {
+  let pointerId = null;
+  let startX = 0;
+  let startScrollLeft = 0;
+  let dragged = false;
+
+  container.addEventListener("pointerdown", (event) => {
+    if (event.button !== undefined && event.button !== 0) {
+      return;
+    }
+
+    pointerId = event.pointerId;
+    startX = event.clientX;
+    startScrollLeft = container.scrollLeft;
+    dragged = false;
+    container.setPointerCapture?.(pointerId);
+  });
+
+  container.addEventListener("pointermove", (event) => {
+    if (pointerId !== event.pointerId) {
+      return;
+    }
+
+    const deltaX = event.clientX - startX;
+
+    if (Math.abs(deltaX) > 4) {
+      dragged = true;
+      container.scrollLeft = startScrollLeft - deltaX;
+      event.preventDefault();
+    }
+  });
+
+  ["pointerup", "pointercancel"].forEach((eventName) => {
+    container.addEventListener(eventName, (event) => {
+      if (pointerId === event.pointerId) {
+        container.releasePointerCapture?.(pointerId);
+        pointerId = null;
+      }
+    });
+  });
+
+  container.addEventListener("click", (event) => {
+    if (dragged) {
+      event.preventDefault();
+      event.stopPropagation();
+      dragged = false;
+    }
+  }, true);
 }
 
 function createPaneTeam(teamName, logo) {
@@ -3452,6 +3576,8 @@ function bindEvents() {
   dom.refreshStreamxButton.addEventListener("click", () => {
     loadStreamxData({ announce: true, forceRefresh: true });
   });
+  enableHorizontalDragScroll(dom.agendaDateTabs);
+  enableHorizontalDragScroll(dom.agendaSportTabs);
 
   dom.fullscreenButton.addEventListener("click", toggleFullscreen);
   dom.splitButton.addEventListener("click", () => {
