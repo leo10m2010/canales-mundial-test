@@ -614,9 +614,7 @@ kbd {
 
 .agenda-sport-button.is-featured {
   color: #f8f3df;
-  background:
-    linear-gradient(90deg, #007a3d 0 17%, #f8f3df 17% 23%, #c8102e 23% 41%, transparent 41%),
-    linear-gradient(135deg, #071a3f 0%, #0b2f6b 46%, #c8102e 72%, #007a3d 100%);
+  background: linear-gradient(135deg, #071a3f 0%, #0b2f6b 38%, #c8102e 68%, #007a3d 100%);
   border-color: rgba(248, 243, 223, 0.52);
   box-shadow: 0 16px 42px rgba(7, 26, 63, 0.34), 0 0 0 1px rgba(248, 243, 223, 0.08) inset;
 }
@@ -669,9 +667,7 @@ kbd {
 .agenda-sport-button.is-featured.is-active,
 .agenda-sport-button.is-featured:focus-visible {
   color: #f8f3df;
-  background:
-    linear-gradient(90deg, #007a3d 0 17%, #f8f3df 17% 23%, #c8102e 23% 41%, transparent 41%),
-    linear-gradient(135deg, #071a3f 0%, #0b2f6b 46%, #c8102e 72%, #007a3d 100%);
+  background: linear-gradient(135deg, #071a3f 0%, #0b2f6b 38%, #c8102e 68%, #007a3d 100%);
   border-color: rgba(248, 243, 223, 0.72);
   box-shadow: 0 0 0 4px rgba(248, 243, 223, 0.1), 0 18px 48px rgba(7, 26, 63, 0.34);
 }
