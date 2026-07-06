@@ -51,8 +51,24 @@
             Eventos y canales desde StreamX-HD. TheSportsDB y World Cup API enriquecen marcadores cuando hay coincidencia.
           </p>
           <div class="agenda-status" id="agendaStatus" role="status">Cargando agenda...</div>
-          <div class="agenda-sport-tabs" id="agendaSportTabs" aria-label="Filtrar eventos por deporte" hidden></div>
-          <div class="agenda-date-tabs" id="agendaDateTabs" aria-label="Filtrar eventos por dia" hidden></div>
+          <div class="agenda-scroll-shell" id="agendaSportShell" hidden>
+            <button class="tab-scroll-arrow is-left" type="button" data-scroll-tabs="agendaSportTabs" data-scroll-dir="-1" aria-label="Ver deportes anteriores">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5 8 12l7 7" /></svg>
+            </button>
+            <div class="agenda-sport-tabs" id="agendaSportTabs" aria-label="Filtrar eventos por deporte" hidden></div>
+            <button class="tab-scroll-arrow is-right" type="button" data-scroll-tabs="agendaSportTabs" data-scroll-dir="1" aria-label="Ver mas deportes">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7" /></svg>
+            </button>
+          </div>
+          <div class="agenda-scroll-shell" id="agendaDateShell" hidden>
+            <button class="tab-scroll-arrow is-left" type="button" data-scroll-tabs="agendaDateTabs" data-scroll-dir="-1" aria-label="Ver fechas anteriores">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5 8 12l7 7" /></svg>
+            </button>
+            <div class="agenda-date-tabs" id="agendaDateTabs" aria-label="Filtrar eventos por dia" hidden></div>
+            <button class="tab-scroll-arrow is-right" type="button" data-scroll-tabs="agendaDateTabs" data-scroll-dir="1" aria-label="Ver mas fechas">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7" /></svg>
+            </button>
+          </div>
           <div class="agenda-grid" id="agendaGrid"></div>
         </section>
 

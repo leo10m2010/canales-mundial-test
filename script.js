@@ -25,7 +25,9 @@ const SELECTORS = {
   channelSearch: "#channelSearch",
   agendaGrid: "#agendaGrid",
   agendaStatus: "#agendaStatus",
+  agendaSportShell: "#agendaSportShell",
   agendaSportTabs: "#agendaSportTabs",
+  agendaDateShell: "#agendaDateShell",
   agendaDateTabs: "#agendaDateTabs",
   agendaCount: "#agendaCount",
   refreshStreamxButton: "#refreshStreamxButton",
@@ -66,6 +68,27 @@ const DEFAULT_AGENDA_SPORTS = [
   { key: "cricket", label: "Cricket" },
   { key: "esports", label: "eSports" },
 ];
+const AGENDA_SPORT_ICONS = {
+  all: "grid",
+  [WORLDCUP_CATEGORY]: "cup",
+  soccer: "soccer",
+  mma: "octagon",
+  boxing: "glove",
+  combat: "bolt",
+  baseball: "baseball",
+  basketball: "basketball",
+  tennis: "tennis",
+  motorsport: "flag",
+  "american-football": "football",
+  volleyball: "volleyball",
+  rugby: "rugby",
+  hockey: "stick",
+  golf: "golf",
+  cycling: "wheel",
+  wrestling: "ring",
+  cricket: "bat",
+  esports: "pad",
+};
 const STREAMX_CHANNEL_CATEGORY = "streamx-247";
 const STREAMX_EVENT_CATEGORY = "streamx-event";
 const STREAMX_EVENTS_URL = "/.netlify/functions/streamx-events";
@@ -1492,9 +1515,11 @@ function formatAgendaDateTabLabel(dateKey) {
 
 function renderAgendaDateTabs(dates, events) {
   dom.agendaDateTabs.replaceChildren();
-  dom.agendaDateTabs.hidden = dates.length <= 1;
+  const shouldHide = dates.length <= 1;
+  dom.agendaDateShell.hidden = shouldHide;
+  dom.agendaDateTabs.hidden = shouldHide;
 
-  if (dates.length <= 1) {
+  if (shouldHide) {
     return;
   }
 
@@ -1517,8 +1542,8 @@ function renderAgendaDateTabs(dates, events) {
     button.classList.toggle("is-active", dateKey === selectedAgendaDate);
     button.setAttribute("aria-pressed", String(dateKey === selectedAgendaDate));
     button.append(
-      createElement("strong", "", formatAgendaDateTabLabel(dateKey)),
-      createElement("span", "", `${count} evento${count === 1 ? "" : "s"}`)
+      createElement("strong", "tab-label", formatAgendaDateTabLabel(dateKey)),
+      createElement("span", "tab-count", `${count} evento${count === 1 ? "" : "s"}`)
     );
     button.addEventListener("click", () => {
       selectedAgendaDate = dateKey;
@@ -1529,6 +1554,7 @@ function renderAgendaDateTabs(dates, events) {
   });
 
   centerSelectedAgendaDateTab();
+  updateTabScrollHints(dom.agendaDateTabs);
 }
 
 function centerSelectedAgendaDateTab() {
@@ -1539,11 +1565,40 @@ function centerSelectedAgendaDateTab() {
   window.requestAnimationFrame(() => {
     const activeButton = dom.agendaDateTabs.querySelector(".agenda-date-button.is-active");
     activeButton?.scrollIntoView({ block: "nearest", inline: "center" });
+    updateTabScrollHints(dom.agendaDateTabs);
   });
+}
+
+function scrollTabRow(container, direction) {
+  const amount = Math.max(container.clientWidth * 0.74, 220);
+  container.scrollBy({ left: amount * direction, behavior: "smooth" });
+  window.setTimeout(() => updateTabScrollHints(container), 220);
+}
+
+function updateTabScrollHints(container) {
+  const shell = container.closest(".agenda-scroll-shell");
+
+  if (!shell) {
+    return;
+  }
+
+  const overflow = container.scrollWidth > container.clientWidth + 2;
+  const canScrollLeft = overflow && container.scrollLeft > 2;
+  const canScrollRight = overflow && container.scrollLeft + container.clientWidth < container.scrollWidth - 2;
+
+  shell.classList.toggle("has-overflow", overflow);
+  shell.classList.toggle("can-scroll-left", canScrollLeft);
+  shell.classList.toggle("can-scroll-right", canScrollRight);
+  shell.querySelector(".tab-scroll-arrow.is-left")?.toggleAttribute("disabled", !canScrollLeft);
+  shell.querySelector(".tab-scroll-arrow.is-right")?.toggleAttribute("disabled", !canScrollRight);
 }
 
 function getAgendaSportLabel(event) {
   return cleanText(event.sportName || event.sport || "Deportes");
+}
+
+function getAgendaSportIcon(key) {
+  return AGENDA_SPORT_ICONS[key] || "generic";
 }
 
 function getAgendaSportKey(event) {
@@ -1606,16 +1661,18 @@ function getAgendaEventsForSelectedSport(events) {
 function renderAgendaSportTabs(sports, events, worldcupEvents = []) {
   dom.agendaSportTabs.replaceChildren();
   const showWorldcup = worldcupEvents.length > 0;
-  dom.agendaSportTabs.hidden = sports.length <= 1 && !showWorldcup;
+  const shouldHide = sports.length <= 1 && !showWorldcup;
+  dom.agendaSportShell.hidden = shouldHide;
+  dom.agendaSportTabs.hidden = shouldHide;
 
-  if (sports.length <= 1 && !showWorldcup) {
+  if (shouldHide) {
     return;
   }
 
-  const buttons = [{ key: "all", label: "Todos", count: events.length }];
+  const buttons = [{ key: "all", label: "Todos", count: events.length, icon: AGENDA_SPORT_ICONS.all }];
 
   if (showWorldcup) {
-    buttons.push({ key: WORLDCUP_CATEGORY, label: "Mundial", count: worldcupEvents.length });
+    buttons.push({ key: WORLDCUP_CATEGORY, label: "Mundial", count: worldcupEvents.length, icon: AGENDA_SPORT_ICONS[WORLDCUP_CATEGORY], featured: true });
   }
 
   buttons.push(...sports);
@@ -1623,13 +1680,19 @@ function renderAgendaSportTabs(sports, events, worldcupEvents = []) {
   buttons.forEach((sport) => {
     const button = createElement("button", "agenda-sport-button");
     button.type = "button";
+    button.dataset.agendaSport = sport.key;
     button.dataset.tvFocusKey = `agenda-sport:${sport.key}`;
     button.classList.toggle("is-active", sport.key === selectedAgendaSport);
+    button.classList.toggle("is-featured", Boolean(sport.featured));
     button.setAttribute("aria-pressed", String(sport.key === selectedAgendaSport));
-    button.append(
-      createElement("strong", "", sport.label),
-      createElement("span", "", `${sport.count} evento${sport.count === 1 ? "" : "s"}`)
+    const icon = createElement("span", `sport-icon sport-icon--${sport.icon || getAgendaSportIcon(sport.key)}`);
+    icon.setAttribute("aria-hidden", "true");
+    const copy = createElement("span", "sport-copy");
+    copy.append(
+      createElement("strong", "tab-label", sport.label),
+      createElement("span", "tab-count", `${sport.count} evento${sport.count === 1 ? "" : "s"}`)
     );
+    button.append(icon, copy);
     button.addEventListener("click", () => {
       selectedAgendaSport = sport.key;
       selectedAgendaDate = "";
@@ -1638,6 +1701,8 @@ function renderAgendaSportTabs(sports, events, worldcupEvents = []) {
     });
     dom.agendaSportTabs.append(button);
   });
+
+  updateTabScrollHints(dom.agendaSportTabs);
 }
 
 function renderAgenda() {
@@ -2306,7 +2371,8 @@ function createElement(tagName, className, text) {
   return element;
 }
 
-function enableHorizontalDragScroll(container) {
+function enableHorizontalDragScroll(container, options = {}) {
+  const dragButtons = options.dragButtons !== false;
   let pointerId = null;
   let startX = 0;
   let startScrollLeft = 0;
@@ -2317,11 +2383,15 @@ function enableHorizontalDragScroll(container) {
       return;
     }
 
+    if (!dragButtons && event.target.closest("button")) {
+      dragged = false;
+      return;
+    }
+
     pointerId = event.pointerId;
     startX = event.clientX;
     startScrollLeft = container.scrollLeft;
     dragged = false;
-    container.setPointerCapture?.(pointerId);
   });
 
   container.addEventListener("pointermove", (event) => {
@@ -2331,7 +2401,7 @@ function enableHorizontalDragScroll(container) {
 
     const deltaX = event.clientX - startX;
 
-    if (Math.abs(deltaX) > 8) {
+    if (Math.abs(deltaX) > 12) {
       dragged = true;
       container.scrollLeft = startScrollLeft - deltaX;
       event.preventDefault();
@@ -2339,9 +2409,8 @@ function enableHorizontalDragScroll(container) {
   });
 
   ["pointerup", "pointercancel"].forEach((eventName) => {
-    container.addEventListener(eventName, (event) => {
+    window.addEventListener(eventName, (event) => {
       if (pointerId === event.pointerId) {
-        container.releasePointerCapture?.(pointerId);
         pointerId = null;
       }
     });
@@ -3611,8 +3680,24 @@ function bindEvents() {
   dom.refreshStreamxButton.addEventListener("click", () => {
     loadStreamxData({ announce: true, forceRefresh: true });
   });
-  enableHorizontalDragScroll(dom.agendaDateTabs);
-  enableHorizontalDragScroll(dom.agendaSportTabs);
+  enableHorizontalDragScroll(dom.agendaDateTabs, { dragButtons: true });
+  enableHorizontalDragScroll(dom.agendaSportTabs, { dragButtons: false });
+  [dom.agendaDateTabs, dom.agendaSportTabs].forEach((container) => {
+    container.addEventListener("scroll", () => updateTabScrollHints(container), { passive: true });
+  });
+  document.querySelectorAll("[data-scroll-tabs]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const container = dom[button.dataset.scrollTabs];
+
+      if (container) {
+        scrollTabRow(container, Number(button.dataset.scrollDir || 1));
+      }
+    });
+  });
+  window.addEventListener("resize", () => {
+    updateTabScrollHints(dom.agendaDateTabs);
+    updateTabScrollHints(dom.agendaSportTabs);
+  });
 
   dom.fullscreenButton.addEventListener("click", toggleFullscreen);
   dom.splitButton.addEventListener("click", () => {
