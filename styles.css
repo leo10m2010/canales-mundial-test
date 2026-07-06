@@ -613,18 +613,20 @@ kbd {
 }
 
 .agenda-sport-button.is-featured {
-  color: var(--black);
-  background: linear-gradient(135deg, var(--signal), #fff38a 62%, #ffad33);
-  border-color: rgba(231, 255, 85, 0.92);
-  box-shadow: 0 16px 40px rgba(231, 255, 85, 0.16);
+  color: #f8f3df;
+  background:
+    linear-gradient(90deg, #007a3d 0 17%, #f8f3df 17% 23%, #c8102e 23% 41%, transparent 41%),
+    linear-gradient(135deg, #071a3f 0%, #0b2f6b 46%, #c8102e 72%, #007a3d 100%);
+  border-color: rgba(248, 243, 223, 0.52);
+  box-shadow: 0 16px 42px rgba(7, 26, 63, 0.34), 0 0 0 1px rgba(248, 243, 223, 0.08) inset;
 }
 
 .featured-tag {
   align-self: start;
   flex: 0 0 auto;
   padding: 2px 6px;
-  color: var(--black);
-  background: rgba(255, 251, 224, 0.95);
+  color: #071a3f;
+  background: #f8f3df;
   border-radius: 999px;
   font-size: 0.5rem;
   font-weight: 900;
@@ -632,13 +634,13 @@ kbd {
 }
 
 .agenda-sport-button.is-featured .sport-icon {
-  color: var(--black);
-  background: rgba(7, 8, 7, 0.14);
-  border-color: rgba(7, 8, 7, 0.16);
+  color: #f8f3df;
+  background: rgba(7, 26, 63, 0.46);
+  border-color: rgba(248, 243, 223, 0.28);
 }
 
 .agenda-sport-button.is-featured .tab-count {
-  color: rgba(7, 8, 7, 0.68);
+  color: rgba(248, 243, 223, 0.78);
 }
 
 .agenda-date-button.is-active,
@@ -666,9 +668,24 @@ kbd {
 
 .agenda-sport-button.is-featured.is-active,
 .agenda-sport-button.is-featured:focus-visible {
-  background: linear-gradient(135deg, var(--signal), #fff38a 62%, #ffad33);
-  border-color: rgba(231, 255, 85, 0.92);
-  box-shadow: 0 0 0 4px rgba(231, 255, 85, 0.1), 0 18px 48px rgba(231, 255, 85, 0.18);
+  color: #f8f3df;
+  background:
+    linear-gradient(90deg, #007a3d 0 17%, #f8f3df 17% 23%, #c8102e 23% 41%, transparent 41%),
+    linear-gradient(135deg, #071a3f 0%, #0b2f6b 46%, #c8102e 72%, #007a3d 100%);
+  border-color: rgba(248, 243, 223, 0.72);
+  box-shadow: 0 0 0 4px rgba(248, 243, 223, 0.1), 0 18px 48px rgba(7, 26, 63, 0.34);
+}
+
+.agenda-sport-button.is-featured.is-active .sport-icon,
+.agenda-sport-button.is-featured:focus-visible .sport-icon {
+  color: #f8f3df;
+  background: rgba(7, 26, 63, 0.46);
+  border-color: rgba(248, 243, 223, 0.28);
+}
+
+.agenda-sport-button.is-featured.is-active .tab-count,
+.agenda-sport-button.is-featured:focus-visible .tab-count {
+  color: rgba(248, 243, 223, 0.78);
 }
 
 .agenda-grid {
