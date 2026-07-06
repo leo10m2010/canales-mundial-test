@@ -560,7 +560,6 @@ kbd {
 }
 
 .sport-icon {
-  position: relative;
   display: grid;
   flex: 0 0 auto;
   width: 30px;
@@ -570,204 +569,20 @@ kbd {
   background: rgba(245, 241, 223, 0.09);
   border: 1px solid rgba(245, 241, 223, 0.12);
   border-radius: 12px;
-  overflow: hidden;
 }
 
-.sport-icon::before,
-.sport-icon::after {
-  content: "";
-  position: absolute;
-  box-sizing: border-box;
+.sport-icon svg {
+  width: 21px;
+  height: 21px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.9;
 }
 
-.sport-icon--grid::before {
-  width: 5px;
-  height: 5px;
-  background: currentColor;
-  box-shadow: 9px 0 0 currentColor, 0 9px 0 currentColor, 9px 9px 0 currentColor;
-  transform: translate(-4px, -4px);
-}
-
-.sport-icon--cup::before {
-  top: 7px;
-  left: 8px;
-  width: 14px;
-  height: 10px;
-  border: 2px solid currentColor;
-  border-top-width: 3px;
-  border-radius: 3px 3px 8px 8px;
-}
-
-.sport-icon--cup::after {
-  bottom: 6px;
-  left: 10px;
-  width: 10px;
-  height: 6px;
-  border-bottom: 2px solid currentColor;
-  border-left: 2px solid currentColor;
-  border-right: 2px solid currentColor;
-}
-
-.sport-icon--soccer::before,
-.sport-icon--baseball::before,
-.sport-icon--basketball::before,
-.sport-icon--tennis::before,
-.sport-icon--volleyball::before {
-  width: 17px;
-  height: 17px;
-  border: 2px solid currentColor;
-  border-radius: 50%;
-}
-
-.sport-icon--soccer::after {
-  width: 5px;
-  height: 5px;
-  background: currentColor;
-  border-radius: 50%;
-}
-
-.sport-icon--baseball::after,
-.sport-icon--tennis::after {
-  width: 15px;
-  height: 15px;
-  border-left: 2px solid currentColor;
-  border-radius: 50%;
-  transform: rotate(28deg);
-}
-
-.sport-icon--basketball::after,
-.sport-icon--volleyball::after {
-  width: 16px;
-  height: 16px;
-  border-left: 2px solid currentColor;
-  border-right: 2px solid currentColor;
-  border-radius: 50%;
-}
-
-.sport-icon--octagon::before,
-.sport-icon--ring::before {
-  width: 18px;
-  height: 18px;
-  border: 2px solid currentColor;
-  clip-path: polygon(30% 0, 70% 0, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0 70%, 0 30%);
-}
-
-.sport-icon--glove::before {
-  width: 16px;
-  height: 13px;
-  border: 2px solid currentColor;
-  border-radius: 8px 8px 6px 6px;
-  transform: rotate(-14deg);
-}
-
-.sport-icon--glove::after {
-  right: 7px;
-  bottom: 6px;
-  width: 8px;
-  height: 6px;
-  border: 2px solid currentColor;
-  border-top: 0;
-  border-radius: 0 0 5px 5px;
-}
-
-.sport-icon--bolt::before {
-  width: 10px;
-  height: 20px;
-  background: currentColor;
-  clip-path: polygon(55% 0, 14% 48%, 48% 48%, 34% 100%, 86% 38%, 52% 38%);
-}
-
-.sport-icon--flag::before {
-  left: 9px;
-  top: 6px;
-  width: 2px;
-  height: 18px;
-  background: currentColor;
-}
-
-.sport-icon--flag::after {
-  left: 11px;
-  top: 7px;
-  width: 12px;
-  height: 9px;
-  border: 2px solid currentColor;
-  border-left: 0;
-}
-
-.sport-icon--football::before,
-.sport-icon--rugby::before {
-  width: 19px;
-  height: 12px;
-  border: 2px solid currentColor;
-  border-radius: 50%;
-  transform: rotate(-20deg);
-}
-
-.sport-icon--football::after,
-.sport-icon--rugby::after {
-  width: 10px;
-  height: 2px;
-  background: currentColor;
-  transform: rotate(-20deg);
-}
-
-.sport-icon--stick::before,
-.sport-icon--bat::before,
-.sport-icon--golf::before {
-  width: 18px;
-  height: 2px;
-  background: currentColor;
-  border-radius: 999px;
-  transform: rotate(-48deg);
-}
-
-.sport-icon--stick::after,
-.sport-icon--bat::after,
-.sport-icon--golf::after {
-  right: 7px;
-  bottom: 7px;
-  width: 7px;
-  height: 2px;
-  background: currentColor;
-  border-radius: 999px;
-}
-
-.sport-icon--wheel::before {
-  width: 18px;
-  height: 18px;
-  border: 2px solid currentColor;
-  border-radius: 50%;
-}
-
-.sport-icon--wheel::after {
-  width: 2px;
-  height: 18px;
-  background: currentColor;
-  box-shadow: 0 0 0 0 currentColor;
-  transform: rotate(45deg);
-}
-
-.sport-icon--pad::before {
-  width: 19px;
-  height: 12px;
-  border: 2px solid currentColor;
-  border-radius: 7px;
-}
-
-.sport-icon--pad::after {
-  width: 3px;
-  height: 3px;
-  background: currentColor;
-  border-radius: 50%;
-  box-shadow: -6px 0 0 currentColor, 6px 0 0 currentColor;
-}
-
-.sport-icon--generic::before {
-  width: 16px;
-  height: 16px;
-  border: 2px solid currentColor;
-  border-radius: 5px;
-  transform: rotate(45deg);
+.sport-icon svg * {
+  vector-effect: non-scaling-stroke;
 }
 
 .sport-copy {
@@ -804,14 +619,12 @@ kbd {
   box-shadow: 0 16px 40px rgba(231, 255, 85, 0.16);
 }
 
-.agenda-sport-button.is-featured::after {
-  content: "ACTUAL";
-  position: absolute;
-  top: -8px;
-  right: 10px;
+.featured-tag {
+  align-self: start;
+  flex: 0 0 auto;
   padding: 2px 6px;
   color: var(--black);
-  background: #fffbe0;
+  background: rgba(255, 251, 224, 0.95);
   border-radius: 999px;
   font-size: 0.5rem;
   font-weight: 900;

@@ -1685,14 +1685,16 @@ function renderAgendaSportTabs(sports, events, worldcupEvents = []) {
     button.classList.toggle("is-active", sport.key === selectedAgendaSport);
     button.classList.toggle("is-featured", Boolean(sport.featured));
     button.setAttribute("aria-pressed", String(sport.key === selectedAgendaSport));
-    const icon = createElement("span", `sport-icon sport-icon--${sport.icon || getAgendaSportIcon(sport.key)}`);
-    icon.setAttribute("aria-hidden", "true");
+    const icon = createSportIcon(sport.icon || getAgendaSportIcon(sport.key));
     const copy = createElement("span", "sport-copy");
     copy.append(
       createElement("strong", "tab-label", sport.label),
       createElement("span", "tab-count", `${sport.count} evento${sport.count === 1 ? "" : "s"}`)
     );
     button.append(icon, copy);
+    if (sport.featured) {
+      button.append(createElement("span", "featured-tag", "ACTUAL"));
+    }
     button.addEventListener("click", () => {
       selectedAgendaSport = sport.key;
       selectedAgendaDate = "";
@@ -2369,6 +2371,125 @@ function createElement(tagName, className, text) {
   }
 
   return element;
+}
+
+function createSportIcon(iconName) {
+  const safeIconName = String(iconName || "generic").replace(/[^a-z0-9-]/gi, "") || "generic";
+  const wrapper = createElement("span", `sport-icon sport-icon--${safeIconName}`);
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+
+  wrapper.setAttribute("aria-hidden", "true");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("focusable", "false");
+
+  const add = (tagName, attributes) => {
+    const node = document.createElementNS("http://www.w3.org/2000/svg", tagName);
+
+    Object.entries(attributes).forEach(([name, value]) => {
+      node.setAttribute(name, value);
+    });
+
+    svg.append(node);
+  };
+
+  switch (safeIconName) {
+    case "grid":
+      [[5, 5], [14, 5], [5, 14], [14, 14]].forEach(([x, y]) => add("rect", { x, y, width: 5, height: 5, rx: 1.4 }));
+      break;
+    case "cup":
+      add("path", { d: "M8 4h8v3a4 4 0 0 1-8 0V4Z" });
+      add("path", { d: "M8 6H5.5A2.5 2.5 0 0 0 8 9" });
+      add("path", { d: "M16 6h2.5A2.5 2.5 0 0 1 16 9" });
+      add("path", { d: "M12 11v5" });
+      add("path", { d: "M8.5 20h7" });
+      add("path", { d: "M10 16h4l1 4H9l1-4Z" });
+      break;
+    case "soccer":
+      add("circle", { cx: 12, cy: 12, r: 8 });
+      add("path", { d: "m12 7.5 3.2 2.3-1.2 3.8h-4l-1.2-3.8L12 7.5Z" });
+      add("path", { d: "M9.1 9.8 6.6 8.7M14.9 9.8l2.5-1.1M10 13.6l-1.2 3M14 13.6l1.2 3" });
+      break;
+    case "octagon":
+    case "ring":
+      add("path", { d: "M8.5 4h7L20 8.5v7L15.5 20h-7L4 15.5v-7L8.5 4Z" });
+      add("path", { d: "M8 12h8" });
+      break;
+    case "glove":
+      add("path", { d: "M8.5 5.5h5.2a4.2 4.2 0 0 1 4.2 4.2v1.7a5.6 5.6 0 0 1-5.6 5.6H8.5A4.5 4.5 0 0 1 4 12.5V10a4.5 4.5 0 0 1 4.5-4.5Z" });
+      add("path", { d: "M7 16.5V20h7v-3" });
+      add("path", { d: "M10 6v6" });
+      add("path", { d: "M13 6v5" });
+      break;
+    case "bolt":
+      add("path", { d: "M13 2 5 13h6l-1 9 9-13h-6l1-7Z", fill: "currentColor", stroke: "none" });
+      break;
+    case "baseball":
+      add("circle", { cx: 12, cy: 12, r: 8 });
+      add("path", { d: "M8.2 5.1c2.3 2.2 2.3 11.6 0 13.8" });
+      add("path", { d: "M15.8 5.1c-2.3 2.2-2.3 11.6 0 13.8" });
+      break;
+    case "basketball":
+      add("circle", { cx: 12, cy: 12, r: 8 });
+      add("path", { d: "M4 12h16" });
+      add("path", { d: "M12 4v16" });
+      add("path", { d: "M6.6 6.2c3.1 2.1 3.1 9.5 0 11.6" });
+      add("path", { d: "M17.4 6.2c-3.1 2.1-3.1 9.5 0 11.6" });
+      break;
+    case "tennis":
+      add("circle", { cx: 12, cy: 12, r: 8 });
+      add("path", { d: "M5.8 7.2c4.8.7 10.3 6.2 11 11" });
+      add("path", { d: "M18.2 6.1c-4.6.8-10.8 7-11.4 11.7" });
+      break;
+    case "flag":
+      add("path", { d: "M6 21V4" });
+      add("path", { d: "M6 5h11l-2 4 2 4H6" });
+      break;
+    case "football":
+    case "rugby":
+      add("ellipse", { cx: 12, cy: 12, rx: 8, ry: 5, transform: "rotate(-22 12 12)" });
+      add("path", { d: "M8.3 13.6 15.7 10.4" });
+      add("path", { d: "m10.6 11.3.8 1.8M12.7 10.4l.8 1.8" });
+      break;
+    case "volleyball":
+      add("circle", { cx: 12, cy: 12, r: 8 });
+      add("path", { d: "M12 4c.3 3.5-1.1 6-4.8 7.2" });
+      add("path", { d: "M19.2 8.6c-3.3-.6-6.2.4-8.7 3" });
+      add("path", { d: "M8.5 19.1c1.1-3.3 3.4-5.4 7-6.3" });
+      break;
+    case "stick":
+      add("path", { d: "M15 4 8 17" });
+      add("path", { d: "M8 17h7.5c1.3 0 2.5.9 2.8 2.2" });
+      add("path", { d: "M6 20h4" });
+      break;
+    case "golf":
+      add("path", { d: "M7 4v16" });
+      add("path", { d: "M7 4h8l-1.4 2L15 8H7" });
+      add("circle", { cx: 16, cy: 19, r: 1.5 });
+      break;
+    case "wheel":
+      add("circle", { cx: 12, cy: 12, r: 8 });
+      add("circle", { cx: 12, cy: 12, r: 2 });
+      add("path", { d: "M12 4v16M4 12h16M6.4 6.4l11.2 11.2M17.6 6.4 6.4 17.6" });
+      break;
+    case "bat":
+      add("path", { d: "M5 19 16.5 7.5" });
+      add("path", { d: "M14.5 5.5 18.5 9.5" });
+      add("path", { d: "M4 20l3-3" });
+      add("circle", { cx: 18.5, cy: 5.5, r: 1.4 });
+      break;
+    case "pad":
+      add("rect", { x: 4, y: 8, width: 16, height: 9, rx: 4 });
+      add("path", { d: "M8 12h4M10 10v4" });
+      add("circle", { cx: 15.5, cy: 11, r: 0.8, fill: "currentColor", stroke: "none" });
+      add("circle", { cx: 17.5, cy: 14, r: 0.8, fill: "currentColor", stroke: "none" });
+      break;
+    default:
+      add("path", { d: "M12 4 20 12 12 20 4 12 12 4Z" });
+      add("path", { d: "M12 8v8M8 12h8" });
+  }
+
+  wrapper.append(svg);
+  return wrapper;
 }
 
 function enableHorizontalDragScroll(container, options = {}) {
