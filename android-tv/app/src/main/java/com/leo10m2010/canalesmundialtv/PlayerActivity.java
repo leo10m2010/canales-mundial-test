@@ -298,7 +298,7 @@ public class PlayerActivity extends Activity {
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(18), dp(12), dp(18), dp(12));
-        panel.setBackground(panelBackground(Color.argb(226, 7, 8, 7), Color.argb(80, 245, 241, 223), 18));
+        panel.setBackground(panelBackground(Color.argb(226, 7, 8, 7), Color.argb(80, 255, 255, 255), 18));
 
         hudTitle = label(channelName, 18, TvStyle.TEXT, true);
         hudTitle.setSingleLine(true);
@@ -340,7 +340,7 @@ public class PlayerActivity extends Activity {
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setPadding(dp(18), dp(18), dp(18), dp(18));
-        panel.setBackground(panelBackground(Color.argb(238, 9, 13, 10), Color.argb(130, 231, 255, 85), 26));
+        panel.setBackground(panelBackground(Color.argb(238, 16, 16, 20), Color.argb(130, 255, 255, 255), 26));
         return panel;
     }
 
@@ -488,8 +488,8 @@ public class PlayerActivity extends Activity {
         rail.setGravity(Gravity.CENTER);
         rail.setPadding(0, dp(22), 0, 0);
         rail.addView(statusDot(TvStyle.SIGNAL));
-        rail.addView(statusDot(Color.rgb(160, 176, 62)));
-        rail.addView(statusDot(Color.rgb(83, 96, 40)));
+        rail.addView(statusDot(Color.rgb(255, 255, 255)));
+        rail.addView(statusDot(Color.rgb(120, 120, 120)));
         panel.addView(rail);
 
         loadingOverlay.addView(panel);
@@ -570,7 +570,7 @@ public class PlayerActivity extends Activity {
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setGravity(Gravity.CENTER);
         panel.setPadding(dp(42), dp(34), dp(42), dp(34));
-        panel.setBackground(panelBackground(Color.rgb(12, 18, 13), Color.argb(110, 231, 255, 85), 30));
+        panel.setBackground(panelBackground(Color.rgb(18, 18, 22), Color.argb(110, 255, 255, 255), 30));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(800), ViewGroup.LayoutParams.WRAP_CONTENT);
         panel.setLayoutParams(params);
         return panel;
@@ -582,7 +582,7 @@ public class PlayerActivity extends Activity {
         button.setFocusable(true);
         button.setClickable(true);
         button.setPadding(dp(18), 0, dp(18), 0);
-        button.setBackground(panelBackground(primary ? TvStyle.SIGNAL : Color.rgb(30, 39, 31), primary ? TvStyle.SIGNAL : Color.argb(120, 245, 241, 223), 999));
+        button.setBackground(panelBackground(primary ? TvStyle.SIGNAL : Color.rgb(40, 40, 46), primary ? TvStyle.SIGNAL : Color.argb(120, 255, 255, 255), 999));
 
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(150), dp(54));
         params.setMargins(dp(6), 0, dp(6), 0);
@@ -590,7 +590,7 @@ public class PlayerActivity extends Activity {
 
         button.setOnFocusChangeListener((view, hasFocus) -> {
             button.setTextColor(hasFocus ? TvStyle.BG : (primary ? TvStyle.BG : TvStyle.TEXT));
-            button.setBackground(panelBackground(hasFocus ? TvStyle.SIGNAL : (primary ? TvStyle.SIGNAL : Color.rgb(30, 39, 31)), hasFocus ? TvStyle.SIGNAL : Color.argb(120, 245, 241, 223), 999));
+            button.setBackground(panelBackground(hasFocus ? TvStyle.SIGNAL : (primary ? TvStyle.SIGNAL : Color.rgb(40, 40, 46)), hasFocus ? TvStyle.SIGNAL : Color.argb(120, 255, 255, 255), 999));
             TvStyle.focusScale(button, hasFocus);
         });
         button.setOnKeyListener((view, keyCode, event) -> {
@@ -779,7 +779,7 @@ public class PlayerActivity extends Activity {
         if (focused || active) {
             return panelBackground(TvStyle.SIGNAL, TvStyle.SIGNAL, 16);
         }
-        return panelBackground(Color.rgb(26, 34, 27), Color.argb(100, 245, 241, 223), 16);
+        return panelBackground(Color.rgb(34, 34, 40), Color.argb(100, 255, 255, 255), 16);
     }
 
     private void closeSourcePanel(boolean showControlHud) {
@@ -903,7 +903,7 @@ public class PlayerActivity extends Activity {
         badge.setText(label + " · " + playlist.get(channelIndex).name);
         boolean active = paneIndex == activePane;
         badge.setTextColor(active ? TvStyle.BG : TvStyle.TEXT);
-        badge.setBackground(panelBackground(active ? TvStyle.SIGNAL : Color.argb(210, 7, 8, 7), active ? TvStyle.SIGNAL : Color.argb(95, 245, 241, 223), 999));
+        badge.setBackground(panelBackground(active ? TvStyle.SIGNAL : Color.argb(210, 7, 8, 7), active ? TvStyle.SIGNAL : Color.argb(95, 255, 255, 255), 999));
 
         // Solo mostrar si es necesario (ej. cambio de canal o modo split)
         badge.setVisibility(View.VISIBLE);

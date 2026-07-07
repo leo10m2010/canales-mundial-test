@@ -93,8 +93,7 @@
 .agenda-filter-trigger::before,
 .agenda-filter-panel::before,
 .preset-language.is-worldcup::before,
-.preset-language.is-streamx::before,
-.highlights-expand::before {
+.preset-language.is-streamx::before {
   content: "";
   position: absolute;
   inset: 0;
@@ -717,23 +716,11 @@ h1 {
   z-index: 2;
 }
 
-.highlights-card.is-expanded {
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  background: #000;
-  animation: hero-zoom 0.4s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-@keyframes hero-zoom {
-  from { transform: scale(0.93); opacity: 0.5; }
-  to { transform: none; opacity: 1; }
-}
-
-.highlights-close,
 .highlights-mute {
   position: absolute;
-  z-index: 3;
+  z-index: 4;
+  right: clamp(16px, 4vw, 48px);
+  bottom: clamp(24px, 5vh, 56px);
   display: grid;
   place-items: center;
   width: 40px;
@@ -746,27 +733,6 @@ h1 {
   cursor: pointer;
 }
 
-.highlights-close {
-  top: 16px;
-  left: 16px;
-  display: none;
-}
-
-.highlights-card.is-expanded .highlights-close {
-  display: grid;
-}
-
-.highlights-mute {
-  right: clamp(16px, 4vw, 48px);
-  bottom: clamp(24px, 5vh, 56px);
-  z-index: 4;
-}
-
-.highlights-close {
-  z-index: 5;
-}
-
-.highlights-close svg,
 .highlights-mute svg {
   width: 18px;
   height: 18px;
@@ -775,18 +741,6 @@ h1 {
   stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
-}
-
-body.hero-open {
-  overflow: hidden;
-}
-
-.highlights-card.is-clickable {
-  cursor: pointer;
-}
-
-.highlights-card:focus-visible {
-  outline: none;
 }
 
 .highlights-thumb {

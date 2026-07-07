@@ -6,14 +6,16 @@ import android.graphics.drawable.GradientDrawable;
 import android.view.View;
 
 public final class TvStyle {
-    public static final int BG = Color.rgb(7, 8, 7);
-    public static final int BG_ALT = Color.rgb(12, 18, 13);
-    public static final int PANEL = Color.rgb(20, 28, 22);
-    public static final int PANEL_DEEP = Color.rgb(11, 15, 12);
-    public static final int SIGNAL = Color.rgb(231, 255, 85);
-    public static final int TEXT = Color.rgb(245, 241, 223);
-    public static final int MUTED = Color.rgb(167, 171, 154);
-    public static final int DANGER = Color.rgb(255, 106, 91);
+    // Apple-TV style palette (matches the web app: warm cinematic dark + white highlight)
+    public static final int BG = Color.rgb(8, 8, 10);          // near-black, used as text-on-highlight
+    public static final int BG_ALT = Color.rgb(14, 14, 16);
+    public static final int PANEL = Color.argb(150, 30, 30, 34);
+    public static final int PANEL_DEEP = Color.argb(200, 18, 18, 22);
+    public static final int SIGNAL = Color.rgb(242, 242, 242);  // white highlight / active state
+    public static final int TEXT = Color.rgb(255, 255, 255);
+    public static final int MUTED = Color.rgb(154, 154, 154);
+    public static final int LINE = Color.argb(38, 255, 255, 255);
+    public static final int DANGER = Color.rgb(255, 90, 77);    // live red
 
     private static float cachedDensity = -1;
 
@@ -37,18 +39,18 @@ public final class TvStyle {
     }
 
     public static GradientDrawable appBackground() {
-        GradientDrawable drawable = new GradientDrawable(
+        // Subtle warm-to-black diagonal, like the web ambient glow.
+        return new GradientDrawable(
                 GradientDrawable.Orientation.TL_BR,
-                new int[] { BG, Color.rgb(10, 23, 14), Color.rgb(2, 4, 3) }
+                new int[] { Color.rgb(16, 10, 12), Color.rgb(9, 9, 11), Color.rgb(5, 5, 6) }
         );
-        return drawable;
     }
 
     public static void focusScale(View view, boolean hasFocus) {
         view.animate()
-                .scaleX(hasFocus ? 1.055f : 1f)
-                .scaleY(hasFocus ? 1.055f : 1f)
-                .setDuration(130)
+                .scaleX(hasFocus ? 1.06f : 1f)
+                .scaleY(hasFocus ? 1.06f : 1f)
+                .setDuration(140)
                 .start();
     }
 }

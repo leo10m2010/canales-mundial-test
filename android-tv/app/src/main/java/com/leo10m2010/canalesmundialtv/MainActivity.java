@@ -75,7 +75,7 @@ public class MainActivity extends Activity {
 
         // 2. Capa verde semi-transparente (Overlay) - Opacidad aumentada para oscurecer la imagen
         View overlay = new View(this);
-        overlay.setBackgroundColor(Color.argb(215, 5, 12, 5));
+        overlay.setBackgroundColor(Color.argb(215, 8, 8, 10));
         root.addView(overlay, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
@@ -84,12 +84,12 @@ public class MainActivity extends Activity {
         centerPanel.setOrientation(LinearLayout.VERTICAL);
         centerPanel.setGravity(Gravity.CENTER);
 
-        TextView title = label("Canales Mundial TV", 58, TvStyle.TEXT, true);
+        TextView title = label("Mundial+", 58, TvStyle.TEXT, true);
         title.setGravity(Gravity.CENTER);
         title.setAlpha(0f);
         title.animate().alpha(1f).setDuration(1200).start();
 
-        TextView subTitle = label("Cargando experiencia 4K...", 16, TvStyle.SIGNAL, false);
+        TextView subTitle = label("Cargando…", 16, TvStyle.MUTED, false);
         subTitle.setGravity(Gravity.CENTER);
         subTitle.setPadding(0, dp(14), 0, 0);
         subTitle.setAlpha(0f);
@@ -239,8 +239,8 @@ public class MainActivity extends Activity {
         // 2. PROTECTOR (Degradado para que el texto sea blanco y se vea perfecto)
         View protector = new View(this);
         GradientDrawable gd = new GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, new int[] {
-                Color.argb(255, 5, 12, 5),   // Negro-verde sólido a la izquierda
-                Color.argb(200, 5, 12, 5),   // Semi-oscuro
+                Color.argb(255, 8, 8, 10),   // Negro-verde sólido a la izquierda
+                Color.argb(200, 8, 8, 10),   // Semi-oscuro
                 Color.argb(0, 0, 0, 0)       // Transparente a la derecha
         });
         protector.setBackground(gd);
@@ -251,7 +251,7 @@ public class MainActivity extends Activity {
         content.setGravity(Gravity.CENTER_VERTICAL);
         content.setPadding(dp(44), 0, dp(44), 0);
 
-        TextView title = label("Canales Mundial TV", 52, Color.WHITE, true);
+        TextView title = label("Mundial+", 52, Color.WHITE, true);
         title.setShadowLayer(12, 0, 0, Color.BLACK);
 
         String smartStatus = "Canales 24/7 activos · ";
@@ -274,7 +274,7 @@ public class MainActivity extends Activity {
             sb.setGravity(Gravity.CENTER_VERTICAL);
             sb.setPadding(0, dp(15), 0, 0);
             TextView badge = label(" EN VIVO ", 11, Color.BLACK, true);
-            badge.setBackground(TvStyle.rounded(this, Color.rgb(255, 60, 60), Color.rgb(255, 60, 60), 4));
+            badge.setBackground(TvStyle.rounded(this, Color.rgb(255, 90, 77), Color.rgb(255, 90, 77), 4));
             TextView st = label(live.name + "  " + live.liveScore, 22, Color.WHITE, true);
             st.setPadding(dp(15), 0, 0, 0);
             sb.addView(badge);
@@ -296,7 +296,7 @@ public class MainActivity extends Activity {
         heroRoot.addView(content, textParams);
 
         // Aplicamos el marco redondeado al contenedor final
-        heroRoot.setBackground(TvStyle.rounded(this, Color.BLACK, Color.argb(40, 231, 255, 85), 32));
+        heroRoot.setBackground(TvStyle.rounded(this, Color.BLACK, Color.argb(40, 255, 255, 255), 32));
         heroRoot.setClipToOutline(true);
         heroRoot.setOutlineProvider(new android.view.ViewOutlineProvider() {
             @Override public void getOutline(View v, android.graphics.Outline o) {
@@ -325,7 +325,7 @@ public class MainActivity extends Activity {
         TextView badge = label(text, 13, textColor, true);
         badge.setGravity(Gravity.CENTER);
         badge.setPadding(dp(14), 0, dp(14), 0);
-        badge.setBackground(TvStyle.rounded(this, fill, Color.argb(70, 245, 241, 223), 999));
+        badge.setBackground(TvStyle.rounded(this, fill, Color.argb(70, 255, 255, 255), 999));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(38));
         params.setMargins(0, 0, 0, dp(9));
         badge.setLayoutParams(params);
@@ -336,7 +336,7 @@ public class MainActivity extends Activity {
         LinearLayout state = new LinearLayout(this);
         state.setOrientation(LinearLayout.VERTICAL);
         state.setPadding(dp(28), dp(26), dp(28), dp(26));
-        state.setBackground(gradientPanel(Color.rgb(24, 19, 18), Color.rgb(44, 25, 22), Color.argb(110, 255, 106, 91), 26));
+        state.setBackground(gradientPanel(Color.rgb(26, 24, 26), Color.rgb(40, 28, 30), Color.argb(110, 255, 90, 77), 26));
 
         TextView title = label("No hay canales cargados", 27, TvStyle.TEXT, true);
         TextView body = label("Revisa que `res/raw/channels.json` exista. La app puede abrir sin internet, pero necesita datos locales o cacheados para mostrar contenido.", 18, TvStyle.MUTED, false);
@@ -394,7 +394,7 @@ public class MainActivity extends Activity {
         headingRow.setPadding(0, 0, 0, dp(12));
 
         TextView heading = label(title, 25, TvStyle.TEXT, true);
-        TextView count = createBadge(channels.size() + "", Color.rgb(31, 42, 30), TvStyle.SIGNAL);
+        TextView count = createBadge(channels.size() + "", Color.rgb(40, 40, 46), TvStyle.SIGNAL);
         LinearLayout.LayoutParams countParams = new LinearLayout.LayoutParams(dp(58), dp(34));
         countParams.setMargins(dp(14), 0, 0, 0);
         count.setLayoutParams(countParams);
@@ -484,7 +484,7 @@ public class MainActivity extends Activity {
                 flag.setBackground(TvStyle.rounded(this, TvStyle.BG, TvStyle.BG, 999));
                 type.setTextColor(TvStyle.BG);
                 name.setTextColor(TvStyle.BG);
-                meta.setTextColor(Color.rgb(34, 39, 29));
+                meta.setTextColor(Color.rgb(20, 20, 20));
                 TvStyle.focusScale(card, true);
                 scrollIntoView(card);
             } else {
@@ -682,7 +682,7 @@ public class MainActivity extends Activity {
         if (networkBadge != null) {
             networkBadge.setText(online ? (usingCache ? "CACHE" : "ONLINE") : "OFFLINE");
             networkBadge.setTextColor(online ? TvStyle.BG : Color.WHITE);
-            networkBadge.setBackground(TvStyle.rounded(this, online ? TvStyle.SIGNAL : TvStyle.DANGER, Color.argb(70, 245, 241, 223), 999));
+            networkBadge.setBackground(TvStyle.rounded(this, online ? TvStyle.SIGNAL : TvStyle.DANGER, Color.argb(70, 255, 255, 255), 999));
         }
     }
 
@@ -752,9 +752,9 @@ public class MainActivity extends Activity {
 
     private GradientDrawable cardBackground(boolean focused) {
         if (focused) {
-            return gradientPanel(TvStyle.SIGNAL, Color.rgb(207, 229, 73), TvStyle.SIGNAL, 24);
+            return gradientPanel(TvStyle.SIGNAL, Color.rgb(255, 255, 255), TvStyle.SIGNAL, 24);
         }
-        return gradientPanel(Color.rgb(22, 31, 24), Color.rgb(11, 16, 12), Color.rgb(49, 63, 51), 24);
+        return gradientPanel(Color.rgb(26, 26, 30), Color.rgb(16, 16, 19), Color.rgb(58, 58, 64), 24);
     }
 
     private GradientDrawable gradientPanel(int start, int end, int stroke, int radiusDp) {

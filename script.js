@@ -1791,16 +1791,6 @@ function pickFeaturedAgendaEvent(events) {
     || pool[0];
 }
 
-function createExpandIcon() {
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("viewBox", "0 0 24 24");
-  svg.setAttribute("aria-hidden", "true");
-  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-  path.setAttribute("d", "M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3");
-  svg.append(path);
-  return svg;
-}
-
 const SVG_NS = "http://www.w3.org/2000/svg";
 let heroMuted = true;
 
@@ -1821,28 +1811,6 @@ function createMuteIcon(muted) {
     "M11 5 6 9H2v6h4l5 4V5Z",
     muted ? "m22 9-6 6M16 9l6 6" : "M15.54 8.46a5 5 0 0 1 0 7.07M19.07 4.93a10 10 0 0 1 0 14.14",
   );
-}
-
-function createCloseIcon() {
-  return svgIcon("M18 6 6 18M6 6l12 12");
-}
-
-function expandHeroPlayer() {
-  const card = dom.highlightsCard;
-  if (card.hidden || card.classList.contains("is-expanded")) {
-    return;
-  }
-  card.classList.add("is-expanded");
-  document.body.classList.add("hero-open");
-}
-
-function collapseHeroPlayer() {
-  const card = dom.highlightsCard;
-  if (!card.classList.contains("is-expanded")) {
-    return;
-  }
-  card.classList.remove("is-expanded");
-  document.body.classList.remove("hero-open");
 }
 
 function makeMiniFlag(logo) {
@@ -1872,12 +1840,6 @@ let highlightsKey = "";
 
 function updateHighlightsCard(events) {
   const card = dom.highlightsCard;
-
-  // Never rebuild while expanded — that would reload the live stream mid-watch.
-  if (card.classList.contains("is-expanded")) {
-    return;
-  }
-
   const featured = pickFeaturedAgendaEvent(events);
 
   if (!featured) {
@@ -1974,11 +1936,7 @@ function updateHighlightsCard(events) {
     play.append(createPlayIcon(), createElement("span", "", "Ver"));
     play.addEventListener("click", (event) => {
       event.stopPropagation();
-      if (isLive) {
-        expandHeroPlayer();
-      } else {
-        openItem(servers[0], { playlist: servers, playlistTitle: `Servidores de ${featured.title}`, match: featured });
-      }
+      openItem(servers[0], { playlist: servers, playlistTitle: `Servidores de ${featured.title}`, match: featured });
     });
     actions.append(play);
   }
@@ -1998,16 +1956,6 @@ function updateHighlightsCard(events) {
     });
     card.append(mute);
   }
-
-  const close = createElement("button", "highlights-close");
-  close.type = "button";
-  close.setAttribute("aria-label", "Cerrar");
-  close.append(createCloseIcon());
-  close.addEventListener("click", (event) => {
-    event.stopPropagation();
-    collapseHeroPlayer();
-  });
-  card.append(close);
 }
 
 function createBillboardTeam(name, logo) {
@@ -4128,12 +4076,6 @@ function bindEvents() {
       closeAgendaFilter();
     }
   });
-  document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && dom.highlightsCard.classList.contains("is-expanded")) {
-      event.stopPropagation();
-      collapseHeroPlayer();
-    }
-  }, true);
   enableHorizontalDragScroll(dom.agendaDateTabs, { dragButtons: true });
   enableHorizontalDragScroll(dom.agendaSportTabs, { dragButtons: false });
   [dom.agendaDateTabs, dom.agendaSportTabs].forEach((container) => {
