@@ -23,6 +23,13 @@ const SELECTORS = {
   channelCount: "#channelCount",
   channelToast: "#channelToast",
   channelSearch: "#channelSearch",
+  agendaViewTabs: "#agendaViewTabs",
+  pageTitle: "#pageTitle",
+  pageSubtitle: "#pageSubtitle",
+  agendaFilter: "#agendaFilter",
+  agendaFilterButton: "#agendaFilterButton",
+  agendaFilterLabel: "#agendaFilterLabel",
+  highlightsCard: "#highlightsCard",
   agendaGrid: "#agendaGrid",
   agendaStatus: "#agendaStatus",
   agendaSportShell: "#agendaSportShell",
@@ -31,8 +38,6 @@ const SELECTORS = {
   agendaDateTabs: "#agendaDateTabs",
   agendaCount: "#agendaCount",
   refreshStreamxButton: "#refreshStreamxButton",
-  modeLabel: "#modeLabel",
-  modeDescription: "#modeDescription",
   tvOverlay: "#tvOverlay",
 };
 
@@ -49,6 +54,12 @@ if (missingElement) {
 const CHANNELS = window.PLAYER_CHANNELS || [];
 const LANGUAGES = ["Español", "English"];
 const WORLDCUP_CATEGORY = "worldcup";
+const AGENDA_VIEWS = {
+  today: { label: "Hoy", title: "Hoy", subtitle: "Partidos de hoy" },
+  results: { label: "Resultados", title: "Resultados", subtitle: "Marcadores finales" },
+  upcoming: { label: "Próximos", title: "Próximos", subtitle: "Siguientes partidos" },
+  all: { label: "Todos", title: "World Cup", subtitle: "Partidos y resultados" },
+};
 const DEFAULT_AGENDA_SPORTS = [
   { key: "soccer", label: "Futbol" },
   { key: "mma", label: "UFC / MMA" },
@@ -209,6 +220,7 @@ let streamxDataLoading = false;
 let selectedAgendaDate = "";
 let agendaDateManuallySelected = false;
 let selectedAgendaSport = "all";
+let selectedAgendaView = "all";
 let lastWorldcupLoadedAt = 0;
 let lastStreamxLoadedAt = 0;
 let lastChannelsLoadedAt = 0;
@@ -391,11 +403,6 @@ function setPlayerMode(mode, options = {}) {
     button.classList.toggle("is-active", button.dataset.playerMode === playerMode);
     button.setAttribute("aria-pressed", String(button.dataset.playerMode === playerMode));
   });
-
-  dom.modeLabel.textContent = isTvMode() ? "TV" : "PC";
-  dom.modeDescription.textContent = isTvMode()
-    ? "Fullscreen automatico y overlay para control remoto."
-    : "Reproduccion sin fullscreen automatico y con iframe libre.";
 
   dom.modeToggleButton.classList.toggle("is-active", isTvMode());
   dom.modeToggleButton.setAttribute("aria-pressed", String(isTvMode()));
@@ -708,7 +715,7 @@ function normalizeStreamxEvents(data) {
           return;
         }
 
-        const title = event.title || makeTitleFromTeams(event) || "Evento StreamX-HD";
+        const title = event.title || makeTitleFromTeams(event) || "Evento";
         const parsedDate = parseStreamxDate(event);
         const leagueLogo = firstImageUrl(league.logo, league.image, league.background);
         const sportLogo = firstImageUrl(sport.logo, sport.image);
@@ -720,7 +727,7 @@ function normalizeStreamxEvents(data) {
           title,
           sportName: cleanText(sport.name || event.sport || "Deportes"),
           sportIcon: sport.icon || "",
-          leagueName: event.league || league.name || "StreamX-HD",
+          leagueName: event.league || league.name || "",
           eventLogo,
           leagueLogo,
           sportLogo,
@@ -787,7 +794,7 @@ function normalizeSportsDbEvents(data) {
   return events.map((event) => {
     const homeTeam = cleanText(event.strHomeTeam || event.homeTeam || "");
     const awayTeam = cleanText(event.strAwayTeam || event.awayTeam || "");
-    const title = cleanText(event.strEvent || event.title || makeTitleFromTeams({ homeTeam, awayTeam }) || "Evento TheSportsDB");
+    const title = cleanText(event.strEvent || event.title || makeTitleFromTeams({ homeTeam, awayTeam }) || "Evento");
     const parsedDate = parseSportsDbDate(event);
     const homeScore = parseNullableScore(event.intHomeScore ?? event.homeScore);
     const awayScore = parseNullableScore(event.intAwayScore ?? event.awayScore);
@@ -1346,8 +1353,8 @@ function buildAgendaEvents() {
 function buildAgendaEvent(streamEvent, game) {
   const source = streamEvent || {};
   const sportsDbEvent = findSportsDbEventForEvent(source);
-  const title = source.title || game?.title || makeTitleFromTeams(source) || "Evento StreamX-HD";
-  const leagueName = source.leagueName || source.league || source.sportName || (game ? "Copa Del Mundo 2026" : "StreamX-HD");
+  const title = source.title || game?.title || makeTitleFromTeams(source) || "Evento";
+  const leagueName = source.leagueName || source.league || source.sportName || (game ? "Copa Del Mundo 2026" : "");
   const parsedDate = source.parsedDate || game?.parsedDate || parseStreamxDate(source);
   const sourceHomeTeam = cleanText(source.homeTeam || game?.homeTeam || "");
   const sourceAwayTeam = cleanText(source.awayTeam || game?.awayTeam || "");
@@ -1664,8 +1671,10 @@ function renderAgendaSportTabs(sports, events, worldcupEvents = []) {
   const shouldHide = sports.length <= 1 && !showWorldcup;
   dom.agendaSportShell.hidden = shouldHide;
   dom.agendaSportTabs.hidden = shouldHide;
+  dom.agendaFilter.hidden = shouldHide;
 
   if (shouldHide) {
+    closeAgendaFilter();
     return;
   }
 
@@ -1699,12 +1708,226 @@ function renderAgendaSportTabs(sports, events, worldcupEvents = []) {
       selectedAgendaSport = sport.key;
       selectedAgendaDate = "";
       agendaDateManuallySelected = false;
+      closeAgendaFilter();
       renderAgenda();
     });
     dom.agendaSportTabs.append(button);
   });
 
+  const selected = buttons.find((sport) => sport.key === selectedAgendaSport);
+  dom.agendaFilterLabel.textContent = selected ? selected.label : "Todos";
   updateTabScrollHints(dom.agendaSportTabs);
+}
+
+let agendaFilterOpen = false;
+
+function toggleAgendaFilter(force) {
+  const next = typeof force === "boolean" ? force : !agendaFilterOpen;
+  agendaFilterOpen = next;
+  dom.agendaFilter.classList.toggle("is-open", next);
+  dom.agendaFilterButton.setAttribute("aria-expanded", String(next));
+}
+
+function closeAgendaFilter() {
+  toggleAgendaFilter(false);
+}
+
+function filterAgendaByView(events, view) {
+  const todayKey = getPeruDateKey();
+
+  return events.filter((event) => {
+    const status = (event.statusInfo || getAgendaStatus(event)).key;
+    const date = event.parsedDate || event.worldcupGame?.parsedDate;
+    const dateKey = date ? getPeruDateKey(date) : null;
+
+    if (view === "today") return dateKey === todayKey;
+    if (view === "results") return status === "finished";
+    if (view === "upcoming") return status === "upcoming" || status === "live";
+    return true;
+  });
+}
+
+function setAgendaView(view) {
+  if (!AGENDA_VIEWS[view] || view === selectedAgendaView) {
+    return;
+  }
+
+  selectedAgendaView = view;
+  syncAgendaViewTabs();
+  updateAgendaHero();
+  renderAgenda();
+}
+
+function syncAgendaViewTabs() {
+  dom.agendaViewTabs.querySelectorAll("[data-agenda-view]").forEach((button) => {
+    const isActive = button.dataset.agendaView === selectedAgendaView;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-pressed", String(isActive));
+  });
+}
+
+function updateAgendaHero() {
+  const view = AGENDA_VIEWS[selectedAgendaView] || AGENDA_VIEWS.all;
+  dom.pageTitle.textContent = view.title;
+  dom.pageSubtitle.textContent = view.subtitle;
+}
+
+function pickFeaturedAgendaEvent(events) {
+  if (!Array.isArray(events) || !events.length) {
+    return null;
+  }
+
+  const hasServers = (event) => (event.serverItems || getEventServerItems(event)).length > 0;
+  const teamEvents = events.filter((event) => event.hasTeams);
+  const withServers = teamEvents.filter(hasServers);
+  const pool = withServers.length ? withServers : (teamEvents.length ? teamEvents : events);
+  const statusOf = (event) => (event.statusInfo || getAgendaStatus(event)).key;
+  const isWorldcup = (event) => Boolean(event.worldcupGame);
+
+  return pool.find((event) => isWorldcup(event) && statusOf(event) === "live")
+    || pool.find((event) => statusOf(event) === "live")
+    || pool.find((event) => isWorldcup(event) && statusOf(event) === "upcoming")
+    || pool.find((event) => statusOf(event) === "upcoming")
+    || pool[0];
+}
+
+function createExpandIcon() {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("d", "M8 3H5a2 2 0 0 0-2 2v3M21 8V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3M16 21h3a2 2 0 0 0 2-2v-3");
+  svg.append(path);
+  return svg;
+}
+
+function makeMiniFlag(logo) {
+  if (!logo) {
+    return null;
+  }
+
+  const wrap = createElement("span", "highlights-flag");
+  const img = document.createElement("img");
+  img.src = logo;
+  img.alt = "";
+  img.loading = "lazy";
+  img.onerror = () => wrap.remove();
+  wrap.append(img);
+  return wrap;
+}
+
+function stopHighlightsPlayer() {
+  const frame = dom.highlightsCard.querySelector(".highlights-frame");
+  if (frame) {
+    frame.remove();
+    highlightsKey = "";
+  }
+}
+
+let highlightsKey = "";
+
+function updateHighlightsCard(events) {
+  const card = dom.highlightsCard;
+  const featured = pickFeaturedAgendaEvent(events);
+
+  if (!featured) {
+    card.hidden = true;
+    card.replaceChildren();
+    card.classList.remove("is-live", "is-clickable");
+    card.onclick = null;
+    card.onkeydown = null;
+    highlightsKey = "";
+    return;
+  }
+
+  const servers = featured.serverItems || getEventServerItems(featured);
+  const status = featured.statusInfo || getAgendaStatus(featured);
+  const isLive = status.key === "live" && servers.length > 0;
+  const title = featured.hasTeams && featured.homeTeam && featured.awayTeam
+    ? `${featured.homeTeam} vs ${featured.awayTeam}`
+    : cleanText(featured.title || "Evento destacado");
+  const desiredKey = isLive ? `live:${getItemKey(servers[0])}` : `static:${featured.id}`;
+
+  card.hidden = false;
+
+  // Avoid rebuilding (and reloading the live iframe) when the featured source is unchanged.
+  if (desiredKey === highlightsKey && card.childElementCount) {
+    const titleEl = card.querySelector(".highlights-title");
+    if (titleEl) titleEl.textContent = title;
+    return;
+  }
+
+  highlightsKey = desiredKey;
+  card.replaceChildren();
+  card.classList.toggle("is-live", isLive);
+
+  const thumb = createElement("div", "highlights-thumb");
+
+  if (isLive) {
+    const frame = createEmbedFrame(servers[0].sourceUrl, title);
+    frame.classList.add("highlights-frame");
+    thumb.append(frame);
+  } else {
+    const image = firstImageUrl(featured.eventLogo, featured.leagueLogo);
+    if (image) {
+      const img = document.createElement("img");
+      img.src = image;
+      img.alt = "";
+      img.loading = "lazy";
+      img.onerror = () => thumb.classList.add("is-empty");
+      thumb.append(img);
+    } else {
+      thumb.classList.add("is-empty");
+    }
+  }
+
+  const badge = createElement("div", "highlights-badge");
+  if (isLive) {
+    badge.classList.add("is-live");
+    badge.append(createElement("span", "live-dot"), createElement("span", "", "EN VIVO"));
+  } else {
+    badge.append(createElement("span", "", status.key === "upcoming" ? "Próximo" : "Destacado"));
+  }
+  thumb.append(badge);
+
+  if (servers.length) {
+    const expand = createElement("button", "highlights-expand");
+    expand.type = "button";
+    expand.dataset.tvFocusKey = "highlights-expand";
+    expand.setAttribute("aria-label", "Abrir a pantalla completa");
+    expand.append(createExpandIcon());
+    expand.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openItem(servers[0], { playlist: servers, playlistTitle: `Servidores de ${featured.title}`, match: featured });
+    });
+    thumb.append(expand);
+  }
+
+  const caption = createElement("div", "highlights-caption");
+  const homeFlag = makeMiniFlag(featured.homeLogo);
+  const awayFlag = makeMiniFlag(featured.awayLogo);
+  if (homeFlag) caption.append(homeFlag);
+  caption.append(createElement("span", "highlights-title", title));
+  if (awayFlag) caption.append(awayFlag);
+
+  card.append(thumb, caption);
+
+  // Live cards play in place (use the expand button to go full screen); static cards open on click.
+  const clickable = !isLive && servers.length > 0;
+  card.classList.toggle("is-clickable", clickable);
+  card.setAttribute("role", clickable ? "button" : "group");
+  card.tabIndex = clickable ? 0 : -1;
+  card.onclick = clickable
+    ? () => openItem(servers[0], { playlist: servers, playlistTitle: `Servidores de ${featured.title}`, match: featured })
+    : null;
+  card.onkeydown = clickable
+    ? (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          card.click();
+        }
+      }
+    : null;
 }
 
 function renderAgenda() {
@@ -1713,79 +1936,51 @@ function renderAgenda() {
   const availableAgendaSports = ensureSelectedAgendaSport(streamAgendaEvents, worldcupAgendaEvents);
   const sourceAgendaEvents = selectedAgendaSport === WORLDCUP_CATEGORY ? worldcupAgendaEvents : streamAgendaEvents;
   const sportAgendaEvents = getAgendaEventsForSelectedSport(sourceAgendaEvents);
-  const availableAgendaDates = ensureSelectedAgendaDate(sportAgendaEvents);
-  const agendaEvents = getAgendaEventsForSelectedDate(sportAgendaEvents);
+  const isDateView = selectedAgendaView === "all";
+  const availableAgendaDates = isDateView ? ensureSelectedAgendaDate(sportAgendaEvents) : [];
+  const agendaEvents = isDateView
+    ? getAgendaEventsForSelectedDate(sportAgendaEvents)
+    : filterAgendaByView(sportAgendaEvents, selectedAgendaView);
   const activeFocusKey = document.activeElement?.dataset?.tvFocusKey || "";
 
   dom.agendaGrid.replaceChildren();
   renderAgendaSportTabs(availableAgendaSports, streamAgendaEvents, worldcupAgendaEvents);
   renderAgendaDateTabs(availableAgendaDates, sportAgendaEvents);
-  dom.agendaCount.textContent = selectedAgendaDate && agendaEvents.length !== sportAgendaEvents.length
-    ? `${agendaEvents.length}/${sportAgendaEvents.length} eventos`
-    : `${agendaEvents.length} eventos`;
+  updateHighlightsCard(sourceAgendaEvents);
+  dom.agendaCount.textContent = `${agendaEvents.length} evento${agendaEvents.length === 1 ? "" : "s"}`;
 
   if ((streamxLoading || worldcupLoading) && !sourceAgendaEvents.length) {
-    setAgendaStatus("Cargando agenda y marcador. La pagina mostrara los eventos apenas llegue la primera fuente...", false, true);
+    setAgendaStatus("Cargando eventos…", false, true);
     return;
   }
 
   if ((streamxError || worldcupError) && !sourceAgendaEvents.length) {
-    setAgendaStatus(`${streamxError || worldcupError} En Netlify funcionara mediante proxy; en servidor local simple puede no estar disponible.`, true, true);
+    setAgendaStatus("No disponible por ahora.", true, true);
     return;
   }
 
   if (!sourceAgendaEvents.length) {
-    setAgendaStatus(selectedAgendaSport === WORLDCUP_CATEGORY
-      ? "No hay partidos del Mundial disponibles desde la API ahora mismo."
-      : "No hay eventos de StreamX-HD disponibles ahora mismo.", false, true);
+    setAgendaStatus("No hay eventos disponibles por ahora.", false, true);
     return;
   }
 
   if (!sportAgendaEvents.length && selectedAgendaSport !== "all" && selectedAgendaSport !== WORLDCUP_CATEGORY) {
     const sportLabel = availableAgendaSports.find((sport) => sport.key === selectedAgendaSport)?.label || "este deporte";
-    setAgendaStatus(`No hay eventos de ${sportLabel} disponibles ahora mismo.`, false, true);
+    setAgendaStatus(`No hay eventos de ${sportLabel} por ahora.`, false, true);
     return;
   }
 
   if (!agendaEvents.length) {
     const sportLabel = selectedAgendaSport === "all" ? "" : ` de ${selectedAgendaSport === WORLDCUP_CATEGORY ? "Mundial" : availableAgendaSports.find((sport) => sport.key === selectedAgendaSport)?.label || "este deporte"}`;
-    setAgendaStatus(`No hay eventos${sportLabel} para ${formatAgendaDateTabLabel(selectedAgendaDate)}. Elige otro dia disponible.`, false, true);
+    if (!isDateView) {
+      setAgendaStatus(`No hay eventos${sportLabel} en "${AGENDA_VIEWS[selectedAgendaView].label}" por ahora.`, false, true);
+      return;
+    }
+    setAgendaStatus(`No hay eventos${sportLabel} para ${formatAgendaDateTabLabel(selectedAgendaDate)}.`, false, true);
     return;
   }
 
-  const statusParts = [];
-
-  if (worldcupLoading) {
-    statusParts.push("marcador actualizandose en segundo plano");
-  } else if (worldcupError) {
-    statusParts.push(worldcupError);
-  } else {
-    statusParts.push("Marcador World Cup activo");
-  }
-
-  if (streamxLoading) {
-    statusParts.push("servidores StreamX-HD actualizandose");
-  } else if (streamxError) {
-    statusParts.push(streamxError);
-  } else {
-    statusParts.push("servidores StreamX-HD activos");
-  }
-
-  if (channelsError) {
-    statusParts.push(channelsError);
-  }
-
-  if (sportsDbLoading) {
-    statusParts.push("TheSportsDB actualizandose");
-  } else if (sportsDbError) {
-    statusParts.push(sportsDbError);
-  } else if (sportsDbEvents.length) {
-    statusParts.push("TheSportsDB activo");
-  }
-
-  statusParts.push(`vista: ${formatAgendaDateTabLabel(selectedAgendaDate)}`);
-  statusParts.push("auto-refresh: marcador inteligente, servidores 2min");
-  setAgendaStatus(statusParts.join(" · "), Boolean(streamxError || worldcupError || channelsError || sportsDbError), false);
+  setAgendaStatus("", false, false);
 
   agendaEvents.forEach((event) => {
     dom.agendaGrid.append(createAgendaCard(event, agendaEvents));
@@ -1796,6 +1991,7 @@ function renderAgenda() {
 
 function setAgendaStatus(message, isError, isProminent) {
   dom.agendaStatus.textContent = message;
+  dom.agendaStatus.hidden = !message;
   dom.agendaStatus.classList.toggle("is-error", isError);
   dom.agendaStatus.classList.toggle("is-prominent", isProminent);
 }
@@ -1830,57 +2026,44 @@ function getSimultaneousAgendaEvents(event, events) {
 function createAgendaCard(event, agendaEvents = []) {
   const status = event.statusInfo || getAgendaStatus(event);
   const servers = event.serverItems || getEventServerItems(event);
-  const simultaneousEvents = getSimultaneousAgendaEvents(event, agendaEvents);
   const playlistTitle = `Servidores de ${event.title}`;
   const card = createElement("article", `match-card is-${status.key}`);
+
   const head = createElement("div", "match-head");
-  const league = createElement("span", "match-league", event.leagueName || "StreamX-HD");
-  const statusPill = createElement("span", `match-status ${status.key}`, status.label);
-  const teams = createElement("div", "match-teams");
-  const scoreBlock = createElement("div", "score-block");
-  const score = createElement("strong", "match-score", formatAgendaScore(event));
-  const scoreLabel = createElement("span", "score-label", formatAgendaScoreLabel(event));
-  const meta = createElement("div", "match-meta");
-  const detail = createElement("div", "match-detail", formatAgendaDetail(event));
-  const serverLabel = createElement("div", "server-title", servers.length ? `${servers.length} canales disponibles` : "Canales pendientes");
+  const leagueRaw = cleanText(event.leagueName || "");
+  const leagueText = leagueRaw && !/streamx/i.test(leagueRaw) ? leagueRaw : cleanText(event.sportName || "");
+  head.append(createElement("span", "match-league", leagueText || "Evento"));
+  if (status.key === "live") {
+    head.append(createElement("span", "match-status live", status.label));
+  }
+
+  const row = createElement("div", "match-row");
+  const [homeScore, awayScore] = getAgendaScorePair(event);
+  row.append(
+    createTeamBlock(event.homeTeam || "Local", event.homeLogo, event.hasTeams),
+    createElement("span", "match-score", homeScore),
+    createAgendaCenter(event, status),
+    createElement("span", "match-score", awayScore),
+    createTeamBlock(event.awayTeam || "Visitante", event.awayLogo, event.hasTeams),
+  );
+
   const serverList = createElement("div", "server-list");
 
-  head.append(league, statusPill);
-  scoreBlock.append(score, scoreLabel);
-  teams.append(createTeamBlock(event.homeTeam || "Local", event.homeLogo), scoreBlock, createTeamBlock(event.awayTeam || "Visitante", event.awayLogo));
-  meta.append(createElement("span", "match-time", formatAgendaTime(event)), createElement("span", "match-date", formatAgendaDate(event)));
-
   if (servers.length) {
-    const watchButton = createElement("button", "watch-button", "Ver primer canal");
+    const watchButton = createElement("button", "watch-button", "Ver");
     watchButton.type = "button";
     watchButton.dataset.tvFocusKey = `watch:${event.id}`;
     watchButton.addEventListener("click", () => openItem(servers[0], { playlist: servers, playlistTitle, match: event }));
     serverList.append(watchButton);
-
-    servers.forEach((serverItem) => {
-      const button = createElement("button", "server-chip", serverItem.sourceName);
-      button.type = "button";
-      button.dataset.tvFocusKey = getItemKey(serverItem);
-      button.addEventListener("click", () => openItem(serverItem, { playlist: servers, playlistTitle, match: event }));
-      serverList.append(button);
-    });
-
-    simultaneousEvents.forEach((simultaneousEvent) => {
-      const button = createElement("button", "server-chip split-chip", `Doble: ${formatCompactMatchTitle(simultaneousEvent)}`);
-      button.type = "button";
-      button.dataset.tvFocusKey = `split:${event.id}:${simultaneousEvent.id}`;
-      button.addEventListener("click", () => openSplitEvents(event, simultaneousEvent));
-      serverList.append(button);
-    });
   } else {
-    const pending = createElement("button", "watch-button is-disabled", "Canales pendientes");
+    const pending = createElement("button", "watch-button is-disabled", "No disponible");
     pending.type = "button";
     pending.dataset.tvFocusKey = `pending:${event.id}`;
     pending.disabled = true;
     serverList.append(pending);
   }
 
-  card.append(head, teams, meta, detail, serverLabel, serverList);
+  card.append(head, row, serverList);
   return card;
 }
 
@@ -1905,83 +2088,6 @@ function getWorldcupGameStatus(game) {
   }
 
   return { key: "upcoming", label: "PRONTO" };
-}
-
-function formatAgendaScore(event) {
-  const game = event.worldcupGame;
-  const sportsDbEvent = event.sportsDbEvent;
-
-  if (!event.hasTeams && !game) {
-    return cleanText(event.sportIcon || "TV");
-  }
-
-  if (!game) {
-    if (hasSportsDbScore(event)) {
-      return `${event.sportsDbScoreHome} - ${event.sportsDbScoreAway}`;
-    }
-
-    return "VS";
-  }
-
-  const status = getWorldcupGameStatus(game);
-
-  if (status.key === "upcoming" && !game.homeScore && !game.awayScore) {
-    return "VS";
-  }
-
-  return `${event.worldcupScoreHome ?? game.homeScore} - ${event.worldcupScoreAway ?? game.awayScore}`;
-}
-
-function formatAgendaScoreLabel(event) {
-  if (hasSportsDbScore(event) && !event.worldcupGame) {
-    return "marcador TheSportsDB";
-  }
-
-  if (!event.hasTeams && !event.worldcupGame) {
-    return cleanText(event.sportName || "evento");
-  }
-
-  if (!event.worldcupGame) {
-    return "sin marcador API";
-  }
-
-  const status = getWorldcupGameStatus(event.worldcupGame);
-
-  if (status.key === "finished") {
-    return "resultado final";
-  }
-
-  if (status.key === "live") {
-    return normalizeText(event.worldcupGame.time_elapsed) === "live" ? "marcador en vivo" : event.worldcupGame.time_elapsed;
-  }
-
-  return "marcador API";
-}
-
-function formatAgendaDetail(event) {
-  const game = event.worldcupGame;
-  const status = event.statusInfo || getAgendaStatus(event);
-  const sportsDbEvent = event.sportsDbEvent;
-
-  if (game && status.key === "finished") {
-    return `Acabo ${formatAgendaEndTime(event)} aprox. · API World Cup`;
-  }
-
-  if (game && status.key === "live") {
-    const elapsed = cleanText(game.time_elapsed || "live");
-    return `${elapsed === "live" ? "Partido en vivo" : elapsed} · API World Cup`;
-  }
-
-  if (game) {
-    return `Programado · API World Cup`;
-  }
-
-  if (hasSportsDbScore(event)) {
-    const sourceStatus = cleanText(sportsDbEvent.strStatus || sportsDbEvent.strProgress || "resultado");
-    return `${sourceStatus} · TheSportsDB`;
-  }
-
-  return `Horario desde StreamX-HD`;
 }
 
 function formatAgendaEndTime(event) {
@@ -2038,25 +2144,118 @@ function restoreTvHomeFocus(activeFocusKey) {
   }, 0);
 }
 
-function createTeamBlock(name, logo) {
+function createTeamBlock(name, logo, hasTeams = true) {
   const team = createElement("div", "team-block");
   const mark = createElement("div", "team-mark");
+  const abbr = makeTeamAbbr(name);
+  const isPlaceholder = !hasTeams || /^(w\d+|l\d+|tbd|ganador|por definir|winner)/i.test(cleanText(name));
 
-  if (logo) {
+  if (logo && !isPlaceholder) {
     const image = document.createElement("img");
     image.src = logo;
     image.alt = name;
     image.loading = "lazy";
     image.onerror = () => {
-      mark.replaceChildren(makeInitials(name));
+      mark.classList.add("is-fallback");
+      mark.replaceChildren(document.createTextNode(abbr));
     };
     mark.append(image);
+  } else if (isPlaceholder) {
+    mark.classList.add("is-placeholder");
+    mark.append(createTrophyIcon());
   } else {
-    mark.textContent = makeInitials(name);
+    mark.classList.add("is-fallback");
+    mark.textContent = abbr;
   }
 
-  team.append(mark, createElement("span", "team-name", name));
+  const label = createElement("span", "team-name", abbr);
+  label.title = cleanText(name);
+  team.append(mark, label);
   return team;
+}
+
+function makeTeamAbbr(name) {
+  const clean = cleanText(name).replace(/[^0-9A-Za-zÀ-ÿ ]/g, "");
+  if (!clean) return "TBD";
+  if (/^[wl]\d+$/i.test(clean)) return clean.toUpperCase();
+  return clean.replace(/\s+/g, "").slice(0, 3).toUpperCase();
+}
+
+function createTrophyIcon() {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("class", "trophy-icon");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  path.setAttribute("d", "M18 4h2a2 2 0 0 1 2 2 5 5 0 0 1-4.09 4.91A6 6 0 0 1 13 14.92V17h3v2H8v-2h3v-2.08A6 6 0 0 1 6.09 10.9 5 5 0 0 1 2 6a2 2 0 0 1 2-2h2V3h12v1ZM6 6H4a3 3 0 0 0 2 2.83V6Zm14 0h-2v2.83A3 3 0 0 0 20 6Z");
+  path.setAttribute("fill", "currentColor");
+  svg.append(path);
+  return svg;
+}
+
+function getAgendaScorePair(event) {
+  const game = event.worldcupGame;
+
+  if (game) {
+    const status = getWorldcupGameStatus(game);
+    if (status.key === "upcoming" && !game.homeScore && !game.awayScore) {
+      return ["-", "-"];
+    }
+    return [
+      String(event.worldcupScoreHome ?? game.homeScore ?? 0),
+      String(event.worldcupScoreAway ?? game.awayScore ?? 0),
+    ];
+  }
+
+  if (hasSportsDbScore(event)) {
+    return [String(event.sportsDbScoreHome), String(event.sportsDbScoreAway)];
+  }
+
+  return ["-", "-"];
+}
+
+function createAgendaCenter(event, status) {
+  const center = createElement("div", `match-center is-${status.key}`);
+
+  if (status.key === "finished") {
+    center.append(createElement("span", "match-center-status", "Final"));
+    center.append(createElement("span", "match-center-sub", "FT"));
+    return center;
+  }
+
+  if (status.key === "live") {
+    const game = event.worldcupGame;
+    const elapsed = game ? cleanText(game.time_elapsed || "") : "";
+    center.append(createElement("span", "match-center-status", "En vivo"));
+    center.append(createElement("span", "match-center-sub", elapsed && elapsed !== "live" ? elapsed : "en juego"));
+    return center;
+  }
+
+  center.append(createElement("span", "match-center-status", formatAgendaTime(event)));
+  center.append(createElement("span", "match-center-sub", formatAgendaDayShort(event)));
+  return center;
+}
+
+function formatAgendaDayShort(event) {
+  const date = event.parsedDate || event.worldcupGame?.parsedDate;
+
+  if (!date) {
+    return "Por definir";
+  }
+
+  const key = getPeruDateKey(date);
+  const today = getPeruDateKey();
+  const tomorrow = getPeruDateKey(new Date(dateFromPeruKey(today).getTime() + 86400000));
+
+  if (key === today) return "Hoy";
+  if (key === tomorrow) return "Mañana";
+
+  return new Intl.DateTimeFormat("es-PE", {
+    timeZone: PERU_TIME_ZONE,
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+  }).format(date);
 }
 
 function getEventServerItems(event) {
@@ -3271,6 +3470,7 @@ async function openPlayer(embed, options = {}) {
   syncSplitMode();
   updateActiveChannel(embedSrc, getPaneState(paneId).sourceKey, paneId);
   toggleChannelSwitcher(false);
+  stopHighlightsPlayer();
   dom.setupPanel.hidden = true;
   dom.player.hidden = false;
 
@@ -3391,6 +3591,7 @@ async function closePlayer(options = {}) {
   toggleChannelSwitcher(false);
   dom.player.hidden = true;
   dom.setupPanel.hidden = false;
+  renderAgenda();
   dom.playerStage.replaceChildren();
   dom.secondaryPlayerStage.replaceChildren();
   dom.secondaryPlayerPane.hidden = true;
@@ -3536,8 +3737,10 @@ function moveSwitcherFocus(direction) {
 
 function getTvHomeFocusables() {
   return Array.from(new Set(Array.from(document.querySelectorAll([
+    ".top-tabs button",
+    ".highlights-card.is-clickable",
+    ".highlights-expand",
     ".agenda button:not(:disabled)",
-    ".mode-button",
     ".preset-grid button",
     ".custom-embed summary",
   ].join(","))))).filter(isElementVisible);
@@ -3801,6 +4004,22 @@ function bindEvents() {
   dom.refreshStreamxButton.addEventListener("click", () => {
     loadStreamxData({ announce: true, forceRefresh: true });
   });
+  dom.agendaViewTabs.querySelectorAll("[data-agenda-view]").forEach((button) => {
+    button.dataset.tvFocusKey = `agenda-view:${button.dataset.agendaView}`;
+    button.addEventListener("click", () => setAgendaView(button.dataset.agendaView));
+  });
+  syncAgendaViewTabs();
+  updateAgendaHero();
+
+  dom.agendaFilterButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    toggleAgendaFilter();
+  });
+  document.addEventListener("click", (event) => {
+    if (agendaFilterOpen && !dom.agendaFilter.contains(event.target)) {
+      closeAgendaFilter();
+    }
+  });
   enableHorizontalDragScroll(dom.agendaDateTabs, { dragButtons: true });
   enableHorizontalDragScroll(dom.agendaSportTabs, { dragButtons: false });
   [dom.agendaDateTabs, dom.agendaSportTabs].forEach((container) => {
@@ -3842,9 +4061,13 @@ function bindEvents() {
       revealControls();
     });
   });
+  let searchDebounce = 0;
   dom.channelSearch.addEventListener("input", () => {
-    searchTerm = normalizeText(dom.channelSearch.value.trim());
-    renderChannels();
+    window.clearTimeout(searchDebounce);
+    searchDebounce = window.setTimeout(() => {
+      searchTerm = normalizeText(dom.channelSearch.value.trim());
+      renderChannels();
+    }, 160);
   });
   dom.player.addEventListener("pointermove", revealControls);
   dom.player.addEventListener("pointerdown", revealControls);

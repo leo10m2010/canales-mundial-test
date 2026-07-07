@@ -7,6 +7,13 @@ node_modules/
 # Build outputs
 dist/
 build/
+android-tv/.gradle/
+android-tv/**/build/
+
+# Android local files
+android-tv/local.properties
+android-tv/advancedFeatures.ini
+android-tv/.idea/
 
 # OS generated files
 .DS_Store
