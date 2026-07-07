@@ -1,6 +1,6 @@
 {
-  "name": "Player Embed",
-  "short_name": "Player",
+  "name": "Mundial+",
+  "short_name": "Mundial+",
   "start_url": "./?mode=tv",
   "scope": "./",
   "display": "fullscreen",

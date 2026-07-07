@@ -1801,6 +1801,50 @@ function createExpandIcon() {
   return svg;
 }
 
+const SVG_NS = "http://www.w3.org/2000/svg";
+let heroMuted = true;
+
+function svgIcon(...paths) {
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  paths.forEach((d) => {
+    const path = document.createElementNS(SVG_NS, "path");
+    path.setAttribute("d", d);
+    svg.append(path);
+  });
+  return svg;
+}
+
+function createMuteIcon(muted) {
+  return svgIcon(
+    "M11 5 6 9H2v6h4l5 4V5Z",
+    muted ? "m22 9-6 6M16 9l6 6" : "M15.54 8.46a5 5 0 0 1 0 7.07M19.07 4.93a10 10 0 0 1 0 14.14",
+  );
+}
+
+function createCloseIcon() {
+  return svgIcon("M18 6 6 18M6 6l12 12");
+}
+
+function expandHeroPlayer() {
+  const card = dom.highlightsCard;
+  if (card.hidden || card.classList.contains("is-expanded")) {
+    return;
+  }
+  card.classList.add("is-expanded");
+  document.body.classList.add("hero-open");
+}
+
+function collapseHeroPlayer() {
+  const card = dom.highlightsCard;
+  if (!card.classList.contains("is-expanded")) {
+    return;
+  }
+  card.classList.remove("is-expanded");
+  document.body.classList.remove("hero-open");
+}
+
 function makeMiniFlag(logo) {
   if (!logo) {
     return null;
@@ -1828,6 +1872,12 @@ let highlightsKey = "";
 
 function updateHighlightsCard(events) {
   const card = dom.highlightsCard;
+
+  // Never rebuild while expanded — that would reload the live stream mid-watch.
+  if (card.classList.contains("is-expanded")) {
+    return;
+  }
+
   const featured = pickFeaturedAgendaEvent(events);
 
   if (!featured) {
@@ -1852,15 +1902,15 @@ function updateHighlightsCard(events) {
 
   // Avoid rebuilding (and reloading the live iframe) when the featured source is unchanged.
   if (desiredKey === highlightsKey && card.childElementCount) {
-    const titleEl = card.querySelector(".highlights-title");
-    if (titleEl) titleEl.textContent = title;
     return;
   }
 
   highlightsKey = desiredKey;
   card.replaceChildren();
   card.classList.toggle("is-live", isLive);
+  delete card.dataset.heroUrl;
 
+  // Media layer — fills the billboard.
   const thumb = createElement("div", "highlights-thumb");
 
   if (isLive) {
@@ -1880,54 +1930,111 @@ function updateHighlightsCard(events) {
       thumb.classList.add("is-empty");
     }
   }
+  card.append(thumb);
 
-  const badge = createElement("div", "highlights-badge");
-  if (isLive) {
-    badge.classList.add("is-live");
-    badge.append(createElement("span", "live-dot"), createElement("span", "", "EN VIVO"));
+  // Netflix-style info overlay, bottom-left.
+  const info = createElement("div", "billboard-info");
+
+  const leagueText = cleanText(
+    featured.leagueName && !/streamx/i.test(featured.leagueName)
+      ? featured.leagueName
+      : featured.sportName || "",
+  );
+  if (leagueText) {
+    info.append(createElement("span", "bb-league", leagueText));
+  }
+
+  if (featured.hasTeams) {
+    const teams = createElement("div", "bb-teams");
+    teams.append(
+      createBillboardTeam(featured.homeTeam || "Local", featured.homeLogo),
+      createElement("span", "bb-vs", "VS"),
+      createBillboardTeam(featured.awayTeam || "Visitante", featured.awayLogo),
+    );
+    info.append(teams);
   } else {
-    badge.append(createElement("span", "", status.key === "upcoming" ? "Próximo" : "Destacado"));
+    info.append(createElement("h2", "bb-title", title));
   }
-  thumb.append(badge);
 
-  if (servers.length) {
-    const expand = createElement("button", "highlights-expand");
-    expand.type = "button";
-    expand.dataset.tvFocusKey = "highlights-expand";
-    expand.setAttribute("aria-label", "Abrir a pantalla completa");
-    expand.append(createExpandIcon());
-    expand.addEventListener("click", (event) => {
+  const badge = createElement("div", `bb-badge is-${status.key}`);
+  if (isLive) {
+    badge.append(createElement("span", "live-dot"), createElement("span", "", "EN VIVO"));
+  } else if (status.key === "upcoming") {
+    badge.append(createElement("span", "", `${formatAgendaTime(featured)} · ${formatAgendaDayShort(featured)}`));
+  } else {
+    badge.append(createElement("span", "", "Finalizado"));
+  }
+  info.append(badge);
+
+  const actions = createElement("div", "bb-actions");
+  if (isLive || servers.length) {
+    const play = createElement("button", "bb-play");
+    play.type = "button";
+    play.dataset.tvFocusKey = "billboard-play";
+    play.append(createPlayIcon(), createElement("span", "", "Ver"));
+    play.addEventListener("click", (event) => {
       event.stopPropagation();
-      openItem(servers[0], { playlist: servers, playlistTitle: `Servidores de ${featured.title}`, match: featured });
+      if (isLive) {
+        expandHeroPlayer();
+      } else {
+        openItem(servers[0], { playlist: servers, playlistTitle: `Servidores de ${featured.title}`, match: featured });
+      }
     });
-    thumb.append(expand);
+    actions.append(play);
+  }
+  info.append(actions);
+  card.append(info);
+
+  if (isLive) {
+    const mute = createElement("button", "highlights-mute");
+    mute.type = "button";
+    mute.setAttribute("aria-label", heroMuted ? "Activar sonido" : "Silenciar");
+    mute.append(createMuteIcon(heroMuted));
+    mute.addEventListener("click", (event) => {
+      event.stopPropagation();
+      heroMuted = !heroMuted;
+      mute.replaceChildren(createMuteIcon(heroMuted));
+      mute.setAttribute("aria-label", heroMuted ? "Activar sonido" : "Silenciar");
+    });
+    card.append(mute);
   }
 
-  const caption = createElement("div", "highlights-caption");
-  const homeFlag = makeMiniFlag(featured.homeLogo);
-  const awayFlag = makeMiniFlag(featured.awayLogo);
-  if (homeFlag) caption.append(homeFlag);
-  caption.append(createElement("span", "highlights-title", title));
-  if (awayFlag) caption.append(awayFlag);
+  const close = createElement("button", "highlights-close");
+  close.type = "button";
+  close.setAttribute("aria-label", "Cerrar");
+  close.append(createCloseIcon());
+  close.addEventListener("click", (event) => {
+    event.stopPropagation();
+    collapseHeroPlayer();
+  });
+  card.append(close);
+}
 
-  card.append(thumb, caption);
+function createBillboardTeam(name, logo) {
+  const wrap = createElement("span", "bb-team");
 
-  // Live cards play in place (use the expand button to go full screen); static cards open on click.
-  const clickable = !isLive && servers.length > 0;
-  card.classList.toggle("is-clickable", clickable);
-  card.setAttribute("role", clickable ? "button" : "group");
-  card.tabIndex = clickable ? 0 : -1;
-  card.onclick = clickable
-    ? () => openItem(servers[0], { playlist: servers, playlistTitle: `Servidores de ${featured.title}`, match: featured })
-    : null;
-  card.onkeydown = clickable
-    ? (event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          card.click();
-        }
-      }
-    : null;
+  if (logo) {
+    const img = document.createElement("img");
+    img.src = logo;
+    img.alt = "";
+    img.loading = "lazy";
+    img.onerror = () => img.remove();
+    wrap.append(img);
+  }
+
+  wrap.append(createElement("span", "bb-team-name", cleanText(name)));
+  return wrap;
+}
+
+function createPlayIcon() {
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS(SVG_NS, "path");
+  path.setAttribute("d", "M8 5v14l11-7z");
+  path.setAttribute("fill", "currentColor");
+  svg.append(path);
+  return svg;
 }
 
 function renderAgenda() {
@@ -2050,9 +2157,10 @@ function createAgendaCard(event, agendaEvents = []) {
   const serverList = createElement("div", "server-list");
 
   if (servers.length) {
-    const watchButton = createElement("button", "watch-button", "Ver");
+    const watchButton = createElement("button", "watch-button");
     watchButton.type = "button";
     watchButton.dataset.tvFocusKey = `watch:${event.id}`;
+    watchButton.append(createPlayIcon(), createElement("span", "", "Ver"));
     watchButton.addEventListener("click", () => openItem(servers[0], { playlist: servers, playlistTitle, match: event }));
     serverList.append(watchButton);
   } else {
@@ -3738,8 +3846,8 @@ function moveSwitcherFocus(direction) {
 function getTvHomeFocusables() {
   return Array.from(new Set(Array.from(document.querySelectorAll([
     ".top-tabs button",
-    ".highlights-card.is-clickable",
-    ".highlights-expand",
+    ".bb-play",
+    ".highlights-mute",
     ".agenda button:not(:disabled)",
     ".preset-grid button",
     ".custom-embed summary",
@@ -3752,10 +3860,10 @@ function focusTvHomeFirst() {
   }
 
   window.setTimeout(() => {
-    const target = document.querySelector(".watch-button:not(:disabled)")
-      || document.querySelector(".server-chip:not(:disabled)")
-      || document.querySelector(".preset-grid button")
-      || document.querySelector(".mode-button.is-active");
+    const target = document.querySelector(".bb-play")
+      || document.querySelector(".top-tabs .top-tab.is-active")
+      || document.querySelector(".watch-button:not(:disabled)")
+      || document.querySelector(".preset-grid button");
 
     if (target) {
       tvHomeFocusInitialized = true;
@@ -4020,6 +4128,12 @@ function bindEvents() {
       closeAgendaFilter();
     }
   });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && dom.highlightsCard.classList.contains("is-expanded")) {
+      event.stopPropagation();
+      collapseHeroPlayer();
+    }
+  }, true);
   enableHorizontalDragScroll(dom.agendaDateTabs, { dragButtons: true });
   enableHorizontalDragScroll(dom.agendaSportTabs, { dragButtons: false });
   [dom.agendaDateTabs, dom.agendaSportTabs].forEach((container) => {
