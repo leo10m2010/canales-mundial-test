@@ -250,11 +250,43 @@ textarea:focus-visible {
 }
 
 .bb-league {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   color: rgba(255, 255, 255, 0.82);
   font-size: 0.78rem;
   font-weight: 700;
   letter-spacing: 0.16em;
   text-transform: uppercase;
+}
+
+.bb-league-badge {
+  height: 30px;
+  width: auto;
+  max-width: 46px;
+  object-fit: contain;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.5));
+}
+
+.match-league-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.match-league-badge {
+  height: 16px;
+  width: auto;
+  max-width: 24px;
+  object-fit: contain;
+  flex: 0 0 auto;
+}
+
+.sport-badge-img {
+  width: 72%;
+  height: 72%;
+  object-fit: contain;
 }
 
 .bb-teams {
@@ -747,7 +779,10 @@ h1 {
   position: absolute;
   inset: 0;
   overflow: hidden;
-  background: linear-gradient(135deg, #14181c, #0a0a0c);
+  background-color: #0a0a0c;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
 }
 
 .highlights-thumb img {
@@ -2165,6 +2200,13 @@ textarea:focus {
 .player-stage video {
   width: 100%;
   height: 100%;
+}
+
+.player-stage {
+  background-color: #000;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
 }
 
 .player-stage iframe,

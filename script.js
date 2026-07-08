@@ -54,6 +54,9 @@ if (missingElement) {
 const CHANNELS = window.PLAYER_CHANNELS || [];
 const LANGUAGES = ["Español", "English"];
 const WORLDCUP_CATEGORY = "worldcup";
+// Fixed fallback for the World Cup badge when a match has no TheSportsDB
+// `strLeagueBadge`. Swap this URL for the exact 2026 emblem if you prefer.
+const WORLDCUP_BADGE_FALLBACK = "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f0/FIFA_logo_without_slogan.svg/240px-FIFA_logo_without_slogan.svg.png";
 const AGENDA_VIEWS = {
   today: { label: "Hoy", title: "Hoy", subtitle: "Partidos de hoy" },
   results: { label: "Resultados", title: "Resultados", subtitle: "Marcadores finales" },
@@ -1362,6 +1365,10 @@ function buildAgendaEvent(streamEvent, game) {
   const eventLogo = firstImageUrl(source.eventLogo, source.logo, source.image, source.background);
   const leagueLogo = firstImageUrl(source.leagueLogo, source.sportLogo);
   const secondaryLogo = leagueLogo && leagueLogo !== eventLogo ? leagueLogo : "";
+  const isWorldcup = Boolean(game) || /mundial|world\s*cup|copa del mundo|fifa/i.test(`${leagueName} ${source.sportName || ""}`);
+  const leagueBadge = firstImageUrl(sportsDbEvent?.strLeagueBadge, sportsDbEvent?.strBadge)
+    || (isWorldcup ? WORLDCUP_BADGE_FALLBACK : "");
+  const matchThumb = firstImageUrl(sportsDbEvent?.strThumb, sportsDbEvent?.strPoster, sportsDbEvent?.strSquare, eventLogo);
   const homeFlagLogo = game ? getTeamFlagImageUrl(sourceHomeTeam) : "";
   const awayFlagLogo = game ? getTeamFlagImageUrl(sourceAwayTeam) : "";
   const worldcupScore = getOrientedScore(sourceHomeTeam, sourceAwayTeam, game?.homeTeam, game?.awayTeam, game?.homeScore, game?.awayScore);
@@ -1377,6 +1384,9 @@ function buildAgendaEvent(streamEvent, game) {
     awayLogo: source.awayLogo || awayFlagLogo || (!hasTeams ? secondaryLogo : ""),
     eventLogo,
     leagueLogo,
+    leagueBadge,
+    matchThumb,
+    isWorldcup,
     hasTeams,
     leagueName,
     parsedDate,
@@ -1694,7 +1704,9 @@ function renderAgendaSportTabs(sports, events, worldcupEvents = []) {
     button.classList.toggle("is-active", sport.key === selectedAgendaSport);
     button.classList.toggle("is-featured", Boolean(sport.featured));
     button.setAttribute("aria-pressed", String(sport.key === selectedAgendaSport));
-    const icon = createSportIcon(sport.icon || getAgendaSportIcon(sport.key));
+    const icon = sport.key === WORLDCUP_CATEGORY
+      ? createWorldcupBadgeTile()
+      : createSportIcon(sport.icon || getAgendaSportIcon(sport.key));
     const copy = createElement("span", "sport-copy");
     copy.append(
       createElement("strong", "tab-label", sport.label),
@@ -1813,6 +1825,29 @@ function createMuteIcon(muted) {
   );
 }
 
+function createWorldcupBadgeTile() {
+  const tile = createElement("span", "sport-icon");
+  const img = makeLeagueBadge(WORLDCUP_BADGE_FALLBACK, "sport-badge-img");
+  if (img) {
+    tile.append(img);
+  }
+  return tile;
+}
+
+function makeLeagueBadge(url, className = "bb-league-badge") {
+  if (!url) {
+    return null;
+  }
+
+  const img = document.createElement("img");
+  img.src = url;
+  img.alt = "";
+  img.loading = "lazy";
+  img.className = className;
+  img.onerror = () => img.remove();
+  return img;
+}
+
 function makeMiniFlag(logo) {
   if (!logo) {
     return null;
@@ -1874,23 +1909,18 @@ function updateHighlightsCard(events) {
 
   // Media layer — fills the billboard.
   const thumb = createElement("div", "highlights-thumb");
+  const poster = firstImageUrl(featured.matchThumb, featured.eventLogo, featured.leagueLogo);
+
+  if (poster) {
+    thumb.style.backgroundImage = `url("${poster}")`;
+  } else {
+    thumb.classList.add("is-empty");
+  }
 
   if (isLive) {
     const frame = createEmbedFrame(servers[0].sourceUrl, title);
     frame.classList.add("highlights-frame");
     thumb.append(frame);
-  } else {
-    const image = firstImageUrl(featured.eventLogo, featured.leagueLogo);
-    if (image) {
-      const img = document.createElement("img");
-      img.src = image;
-      img.alt = "";
-      img.loading = "lazy";
-      img.onerror = () => thumb.classList.add("is-empty");
-      thumb.append(img);
-    } else {
-      thumb.classList.add("is-empty");
-    }
   }
   card.append(thumb);
 
@@ -1902,8 +1932,12 @@ function updateHighlightsCard(events) {
       ? featured.leagueName
       : featured.sportName || "",
   );
-  if (leagueText) {
-    info.append(createElement("span", "bb-league", leagueText));
+  if (featured.leagueBadge || leagueText) {
+    const league = createElement("div", "bb-league");
+    const badge = makeLeagueBadge(featured.leagueBadge);
+    if (badge) league.append(badge);
+    if (leagueText) league.append(createElement("span", "", leagueText));
+    info.append(league);
   }
 
   if (featured.hasTeams) {
@@ -2087,7 +2121,13 @@ function createAgendaCard(event, agendaEvents = []) {
   const head = createElement("div", "match-head");
   const leagueRaw = cleanText(event.leagueName || "");
   const leagueText = leagueRaw && !/streamx/i.test(leagueRaw) ? leagueRaw : cleanText(event.sportName || "");
-  head.append(createElement("span", "match-league", leagueText || "Evento"));
+  const leagueWrap = createElement("div", "match-league-wrap");
+  if (event.isWorldcup && event.leagueBadge) {
+    const badge = makeLeagueBadge(event.leagueBadge, "match-league-badge");
+    if (badge) leagueWrap.append(badge);
+  }
+  leagueWrap.append(createElement("span", "match-league", leagueText || "Evento"));
+  head.append(leagueWrap);
   if (status.key === "live") {
     head.append(createElement("span", "match-status live", status.label));
   }
@@ -3516,6 +3556,9 @@ async function openPlayer(embed, options = {}) {
   prepareEmbeds(frame);
 
   getPaneState(paneId).sourceKey = options.sourceKey || "";
+  const posterMatch = getPaneState(paneId).match;
+  const posterUrl = firstImageUrl(posterMatch?.matchThumb, posterMatch?.eventLogo, posterMatch?.leagueBadge);
+  paneStage.style.backgroundImage = posterUrl ? `url("${posterUrl}")` : "";
   paneStage.replaceChildren(frame);
 
   if (paneId === PLAYER_PANES.SECONDARY) {
@@ -3650,6 +3693,8 @@ async function closePlayer(options = {}) {
   renderAgenda();
   dom.playerStage.replaceChildren();
   dom.secondaryPlayerStage.replaceChildren();
+  dom.playerStage.style.backgroundImage = "";
+  dom.secondaryPlayerStage.style.backgroundImage = "";
   dom.secondaryPlayerPane.hidden = true;
   dom.player.classList.remove("is-idle", "is-fullscreen");
   dom.channelToast.classList.remove("is-visible");
