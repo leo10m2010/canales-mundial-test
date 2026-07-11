@@ -110,6 +110,21 @@ async function findTeamArtwork(teamName) {
   return getTeamArtwork(team);
 }
 
+async function findWbcArtwork(home, away) {
+  const query = `${home} ${away}`;
+  const data = await fetchJson(`https://wbcboxing.com/wp-json/wp/v2/posts?search=${encodeURIComponent(query)}&per_page=5&_embed=1`);
+  const posts = Array.isArray(data) ? data : [];
+  const homeLastName = normalizeText(home).split(" ").pop();
+  const awayLastName = normalizeText(away).split(" ").pop();
+  const post = posts.find((candidate) => {
+    const title = normalizeText(candidate?.title?.rendered);
+    return title.includes(homeLastName) && title.includes(awayLastName);
+  });
+  const media = post?._embedded?.["wp:featuredmedia"]?.[0];
+  const image = media?.media_details?.sizes?.full?.source_url || media?.source_url || "";
+  return image ? { image, sourceUrl: post.link || "" } : null;
+}
+
 async function resolveArtwork(home, away) {
   try {
     const event = await findEvent(home, away);
@@ -123,7 +138,20 @@ async function resolveArtwork(home, away) {
 
   const settled = await Promise.allSettled([findTeamArtwork(home), findTeamArtwork(away)]);
   const images = settled.flatMap((result) => result.status === "fulfilled" && result.value ? [result.value] : []);
-  return { image: images[0] || "", alternateImage: images[1] || "", source: images.length ? "TheSportsDB fanart" : "", kind: images.length ? "team" : "" };
+  if (images.length) {
+    return { image: images[0], alternateImage: images[1] || "", source: "TheSportsDB fanart", kind: "team" };
+  }
+
+  try {
+    const wbcArtwork = await findWbcArtwork(home, away);
+    if (wbcArtwork) {
+      return { image: wbcArtwork.image, source: "World Boxing Council", sourceUrl: wbcArtwork.sourceUrl, kind: "event" };
+    }
+  } catch (error) {
+    // No official WBC artwork was found.
+  }
+
+  return { image: "", source: "", kind: "" };
 }
 
 exports.handler = async (event) => {

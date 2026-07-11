@@ -1371,6 +1371,7 @@ kbd {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
+  overflow-anchor: none;
 }
 
 .match-card {
@@ -3591,6 +3592,21 @@ body.is-tv-mode .watch-button {
   height: 88%;
   object-fit: contain;
   filter: drop-shadow(0 9px 18px rgba(0, 0, 0, 0.38));
+}
+
+.event-card-visual.is-promo {
+  width: 156px;
+  height: 104px;
+  overflow: hidden;
+  border-color: var(--event-a-glow);
+  border-radius: 18px;
+  box-shadow: 0 16px 40px var(--event-a-soft);
+}
+
+.event-card-visual.is-promo > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .event-card-visual.is-title > .sport-icon {

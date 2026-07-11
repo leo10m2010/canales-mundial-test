@@ -153,7 +153,7 @@ const CHANNELS_REFRESH_INTERVAL = 600000;
 const CLIENT_FETCH_TIMEOUT_MS = 10000;
 const UPCOMING_LIVE_CHECK_WINDOW = 45 * 60000;
 const BILLBOARD_PREVIEW_TIMEOUT = 12000;
-const WORLDCUP_BILLBOARD_WINDOW = 6 * 60 * 60 * 1000;
+const WORLDCUP_BILLBOARD_WINDOW = 2 * 60 * 60 * 1000;
 const PLAYER_MODES = { PC: "pc", TV: "tv" };
 const PLAYER_PANES = { PRIMARY: "primary", SECONDARY: "secondary" };
 const SIMULTANEOUS_MATCH_TOLERANCE = 15 * 60000;
@@ -582,15 +582,33 @@ function setRefreshButtonLoading(isLoading) {
   dom.refreshStreamxButton.textContent = isLoading ? "Actualizando..." : "Actualizar agenda";
 }
 
+function getCollectionSignature(items) {
+  return JSON.stringify((items || []).map((item) => [
+    item.id,
+    item.title,
+    item.status,
+    item.parsedDate?.getTime?.() || "",
+    item.homeScore,
+    item.awayScore,
+    item.time_elapsed,
+    item.finished,
+    (item.servers || []).map((server) => `${server.active !== false}:${server.url}`).join("|"),
+  ]));
+}
+
 async function loadWorldcupGames(options = {}) {
+  const showLoadingState = !worldcupGames.length;
+  let changed = false;
   worldcupLoading = true;
   worldcupError = "";
-  renderAgenda();
+  if (showLoadingState) renderAgenda();
 
   try {
-    worldcupGames = normalizeWorldcupGames(await fetchJson(WORLDCUP_GAMES_URL, {
+    const nextGames = normalizeWorldcupGames(await fetchJson(WORLDCUP_GAMES_URL, {
       forceRefresh: options.forceRefresh,
     }));
+    changed = getCollectionSignature(nextGames) !== getCollectionSignature(worldcupGames);
+    worldcupGames = nextGames;
     lastWorldcupLoadedAt = Date.now();
   } catch (error) {
     worldcupError = worldcupGames.length
@@ -599,7 +617,7 @@ async function loadWorldcupGames(options = {}) {
   }
 
   worldcupLoading = false;
-  renderAgenda();
+  if (changed || showLoadingState) renderAgenda();
 
   if (scoreRefreshTimer) {
     scheduleWorldcupRefresh();
@@ -617,14 +635,18 @@ async function loadWorldcupGames(options = {}) {
 }
 
 async function loadStreamxSchedule(options = {}) {
+  const showLoadingState = !streamxEvents.length;
+  let changed = false;
   streamxLoading = true;
   streamxError = "";
-  renderAgenda();
+  if (showLoadingState) renderAgenda();
 
   try {
-    streamxEvents = normalizeStreamxEvents(await fetchJson(STREAMX_EVENTS_URL, {
+    const nextEvents = normalizeStreamxEvents(await fetchJson(STREAMX_EVENTS_URL, {
       forceRefresh: options.forceRefresh,
     }));
+    changed = getCollectionSignature(nextEvents) !== getCollectionSignature(streamxEvents);
+    streamxEvents = nextEvents;
     lastStreamxLoadedAt = Date.now();
   } catch (error) {
     streamxError = streamxEvents.length
@@ -633,8 +655,10 @@ async function loadStreamxSchedule(options = {}) {
   }
 
   streamxLoading = false;
-  renderAgenda();
-  renderChannelSwitcher();
+  if (changed || showLoadingState) {
+    renderAgenda();
+    renderChannelSwitcher();
+  }
 
   if (!streamxError) {
     await Promise.allSettled([
@@ -668,7 +692,6 @@ async function loadStreamxChannels(options = {}) {
       : "No se pudieron cargar los canales 24/7.";
   }
 
-  renderAgenda();
 }
 
 async function loadSportsDbEvents(options = {}) {
@@ -685,14 +708,18 @@ async function loadSportsDbEvents(options = {}) {
     return;
   }
 
+  const showLoadingState = !sportsDbEvents.length;
+  let changed = false;
   sportsDbLoading = true;
   sportsDbError = "";
-  renderAgenda();
+  if (showLoadingState) renderAgenda();
 
   try {
-    sportsDbEvents = normalizeSportsDbEvents(await fetchJson(`${THESPORTSDB_EVENTS_URL}?dates=${encodeURIComponent(dates.join(","))}`, {
+    const nextEvents = normalizeSportsDbEvents(await fetchJson(`${THESPORTSDB_EVENTS_URL}?dates=${encodeURIComponent(dates.join(","))}`, {
       forceRefresh: options.forceRefresh,
     }));
+    changed = getCollectionSignature(nextEvents) !== getCollectionSignature(sportsDbEvents);
+    sportsDbEvents = nextEvents;
     lastSportsDbLoadedAt = Date.now();
   } catch (error) {
     sportsDbError = sportsDbEvents.length
@@ -701,7 +728,7 @@ async function loadSportsDbEvents(options = {}) {
   }
 
   sportsDbLoading = false;
-  renderAgenda();
+  if (changed || showLoadingState) renderAgenda();
 }
 
 function getParticipantProfileKey(name, sportKey) {
@@ -754,8 +781,15 @@ async function loadParticipantProfiles(options = {}) {
       }
     });
 
+    const profileSignature = (profiles) => JSON.stringify(Array.from(profiles.entries()).map(([key, profile]) => [
+      key,
+      profile.name,
+      profile.image,
+      profile.sourceUrl,
+    ]));
+    const changed = profileSignature(nextProfiles) !== profileSignature(participantProfiles);
     participantProfiles = nextProfiles;
-    renderAgenda();
+    if (changed) renderAgenda();
   } catch (error) {
     // Participant photos are optional; initials remain as the visual fallback.
   }
@@ -1764,7 +1798,10 @@ function centerSelectedAgendaDateTab() {
 
   window.requestAnimationFrame(() => {
     const activeButton = dom.agendaDateTabs.querySelector(".agenda-date-button.is-active");
-    activeButton?.scrollIntoView({ block: "nearest", inline: "center" });
+    if (activeButton) {
+      const targetLeft = activeButton.offsetLeft - (dom.agendaDateTabs.clientWidth - activeButton.offsetWidth) / 2;
+      dom.agendaDateTabs.scrollTo({ left: Math.max(0, targetLeft), behavior: "smooth" });
+    }
     updateTabScrollHints(dom.agendaDateTabs);
   });
 }
@@ -1986,8 +2023,8 @@ function pickFeaturedAgendaEvent(events) {
   };
 
   return pool.find((event) => isWorldcup(event) && statusOf(event) === "live")
-    || pool.find((event) => isWorldcup(event) && startsWithinWorldcupWindow(event))
     || pool.find((event) => statusOf(event) === "live")
+    || pool.find((event) => isWorldcup(event) && startsWithinWorldcupWindow(event))
     || pool.find((event) => statusOf(event) === "upcoming")
     || pool[0];
 }
@@ -2483,6 +2520,26 @@ function createEventSummary(event, status) {
 
 function createEventVisual(event) {
   const visual = createElement("div", `event-card-visual is-${event.displayMode || "title"}`);
+
+  if (event.displayMode === "individual" && (!event.homeLogo || !event.awayLogo)) {
+    const applyPromo = (artwork) => {
+      if (!artwork || !visual.isConnected) return;
+      const image = document.createElement("img");
+      image.alt = cleanText(event.title || `${event.homeTeam} vs ${event.awayTeam}`);
+      image.loading = "lazy";
+      image.onload = () => {
+        visual.className = "event-card-visual is-promo";
+        visual.replaceChildren(image);
+      };
+      image.src = artwork;
+    };
+
+    if (event.matchThumb) {
+      window.requestAnimationFrame(() => applyPromo(event.matchThumb));
+    } else {
+      resolveBillboardArtwork(event).then(applyPromo);
+    }
+  }
 
   if (event.hasTeams) {
     visual.append(
