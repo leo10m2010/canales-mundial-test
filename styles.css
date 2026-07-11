@@ -787,7 +787,7 @@ h1 {
   overflow: hidden;
   background-color: #0a0a0c;
   background-size: cover;
-  background-position: center;
+  background-position: center 30%;
   background-repeat: no-repeat;
 }
 

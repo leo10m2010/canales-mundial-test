@@ -133,6 +133,7 @@ const STREAMX_CHANNELS_URL = "/.netlify/functions/streamx-channels";
 const THESPORTSDB_EVENTS_URL = "/.netlify/functions/thesportsdb-events";
 const PARTICIPANT_PROFILES_URL = "/.netlify/functions/participant-profiles";
 const IMAGE_PROXY_URL = "/.netlify/functions/image-proxy";
+const EVENT_ARTWORK_URL = "/.netlify/functions/event-artwork";
 const STREAMX_CANONICAL_HOST = "streamx-hd.com";
 const STREAMX_CANONICAL_ORIGIN = `https://${STREAMX_CANONICAL_HOST}`;
 const STREAMX_LEGACY_HOSTS = new Set(["stream-xhd.com", "www.stream-xhd.com"]);
@@ -152,6 +153,7 @@ const CHANNELS_REFRESH_INTERVAL = 600000;
 const CLIENT_FETCH_TIMEOUT_MS = 10000;
 const UPCOMING_LIVE_CHECK_WINDOW = 45 * 60000;
 const BILLBOARD_PREVIEW_TIMEOUT = 12000;
+const WORLDCUP_BILLBOARD_WINDOW = 6 * 60 * 60 * 1000;
 const PLAYER_MODES = { PC: "pc", TV: "tv" };
 const PLAYER_PANES = { PRIMARY: "primary", SECONDARY: "secondary" };
 const SIMULTANEOUS_MATCH_TOLERANCE = 15 * 60000;
@@ -242,6 +244,7 @@ let sportsDbEvents = [];
 let participantProfiles = new Map();
 const imagePaletteCache = new Map();
 const eventPaletteCache = new Map();
+const eventArtworkCache = new Map();
 let pagePaletteRequest = 0;
 let streamxLoading = false;
 let worldcupLoading = false;
@@ -669,7 +672,11 @@ async function loadStreamxChannels(options = {}) {
 }
 
 async function loadSportsDbEvents(options = {}) {
-  const dates = getAvailableAgendaDates(streamxEvents).slice(0, 7);
+  const dates = Array.from(new Set(getAvailableAgendaDates(streamxEvents).flatMap((dateKey) => {
+    const date = dateFromPeruKey(dateKey);
+    if (!date) return [dateKey];
+    return [-1, 0, 1].map((offset) => getPeruDateKey(new Date(date.getTime() + offset * 86400000)));
+  }))).sort().slice(0, 7);
 
   if (!dates.length) {
     sportsDbEvents = [];
@@ -909,7 +916,7 @@ function normalizeSportsDbEvents(data) {
       homeScore,
       awayScore,
       parsedDate,
-      dateKey: cleanText(event.sourceDate || event.dateEvent || "") || (parsedDate ? getPeruDateKey(parsedDate) : ""),
+      dateKey: parsedDate ? getPeruDateKey(parsedDate) : cleanText(event.dateEvent || event.sourceDate || ""),
       sportName: cleanText(event.strSport || event.sportName || ""),
       leagueName: cleanText(event.strLeague || event.leagueName || ""),
       matchKey: makeMatchKey(homeTeam, awayTeam),
@@ -1057,6 +1064,7 @@ function canonicalTeamName(value) {
     egypt: "egypt",
     egipto: "egypt",
     england: "england",
+    inglaterra: "england",
     espana: "spain",
     france: "france",
     francia: "france",
@@ -1072,6 +1080,8 @@ function canonicalTeamName(value) {
     marruecos: "morocco",
     netherlands: "netherlands",
     "paises bajos": "netherlands",
+    norway: "norway",
+    noruega: "norway",
     paraguay: "paraguay",
     portugal: "portugal",
     qatar: "qatar",
@@ -1529,7 +1539,13 @@ function buildAgendaEvent(streamEvent, game) {
   const isWorldcup = Boolean(game) || /mundial|world\s*cup|copa del mundo|fifa/i.test(`${leagueName} ${source.sportName || ""}`);
   const leagueBadge = firstImageUrl(sportsDbEvent?.strLeagueBadge, sportsDbEvent?.strBadge)
     || (isWorldcup ? WORLDCUP_BADGE_FALLBACK : "");
-  const matchThumb = firstImageUrl(sportsDbEvent?.strThumb, sportsDbEvent?.strPoster, sportsDbEvent?.strSquare, eventLogo);
+  const matchThumb = firstImageUrl(
+    sportsDbEvent?.strThumb,
+    sportsDbEvent?.strFanart,
+    sportsDbEvent?.strBanner,
+    sportsDbEvent?.strPoster,
+    sportsDbEvent?.strSquare,
+  );
   const homeFlagLogo = game ? getTeamFlagImageUrl(sourceHomeTeam) : "";
   const awayFlagLogo = game ? getTeamFlagImageUrl(sourceAwayTeam) : "";
   const worldcupScore = getOrientedScore(sourceHomeTeam, sourceAwayTeam, game?.homeTeam, game?.awayTeam, game?.homeScore, game?.awayScore);
@@ -1962,11 +1978,16 @@ function pickFeaturedAgendaEvent(events) {
   const withServers = teamEvents.filter(hasServers);
   const pool = withServers.length ? withServers : (teamEvents.length ? teamEvents : events);
   const statusOf = (event) => (event.statusInfo || getAgendaStatus(event)).key;
-  const isWorldcup = (event) => Boolean(event.worldcupGame);
+  const isWorldcup = (event) => Boolean(event.worldcupGame || event.isWorldcup || isWorldCupEvent(event, { name: event.leagueName }));
+  const startsWithinWorldcupWindow = (event) => {
+    const date = event.parsedDate || event.worldcupGame?.parsedDate;
+    const distance = date ? date.getTime() - Date.now() : Number.POSITIVE_INFINITY;
+    return statusOf(event) === "upcoming" && distance >= 0 && distance <= WORLDCUP_BILLBOARD_WINDOW;
+  };
 
   return pool.find((event) => isWorldcup(event) && statusOf(event) === "live")
+    || pool.find((event) => isWorldcup(event) && startsWithinWorldcupWindow(event))
     || pool.find((event) => statusOf(event) === "live")
-    || pool.find((event) => isWorldcup(event) && statusOf(event) === "upcoming")
     || pool.find((event) => statusOf(event) === "upcoming")
     || pool[0];
 }
@@ -2051,6 +2072,26 @@ function makeBillboardPreviewUrl(sourceUrl) {
   }
 }
 
+function resolveBillboardArtwork(event) {
+  const homeTeam = cleanText(event.worldcupGame?.homeTeam || event.homeTeam || "");
+  const awayTeam = cleanText(event.worldcupGame?.awayTeam || event.awayTeam || "");
+  const cacheKey = `${canonicalTeamName(homeTeam)}|${canonicalTeamName(awayTeam)}`;
+
+  if (!homeTeam || !awayTeam) {
+    return Promise.resolve("");
+  }
+
+  if (eventArtworkCache.has(cacheKey)) {
+    return eventArtworkCache.get(cacheKey);
+  }
+
+  const request = fetchJson(`${EVENT_ARTWORK_URL}?home=${encodeURIComponent(homeTeam)}&away=${encodeURIComponent(awayTeam)}`)
+    .then((data) => firstImageUrl(data?.image, data?.alternateImage))
+    .catch(() => "");
+  eventArtworkCache.set(cacheKey, request);
+  return request;
+}
+
 let highlightsKey = "";
 
 function updateHighlightsCard(events) {
@@ -2074,9 +2115,11 @@ function updateHighlightsCard(events) {
   const title = featured.hasTeams && featured.homeTeam && featured.awayTeam
     ? `${featured.homeTeam} vs ${featured.awayTeam}`
     : cleanText(featured.title || "Evento destacado");
-  const desiredKey = isLive ? `live:${getItemKey(servers[0])}` : `static:${featured.id}`;
+  const poster = firstImageUrl(featured.matchThumb);
+  const desiredKey = `${isLive ? `live:${getItemKey(servers[0])}` : `static:${featured.id}`}|${poster}`;
 
   card.hidden = false;
+  card.dataset.featuredEvent = String(featured.id);
   applyEventPalette(card, featured);
   applyPagePalette(featured);
 
@@ -2092,12 +2135,17 @@ function updateHighlightsCard(events) {
 
   // Media layer — fills the billboard.
   const thumb = createElement("div", "highlights-thumb");
-  const poster = firstImageUrl(featured.matchThumb, featured.eventLogo, featured.leagueLogo);
 
   if (poster) {
     thumb.style.backgroundImage = `url("${poster}")`;
   } else {
     thumb.classList.add("is-empty");
+    resolveBillboardArtwork(featured).then((artwork) => {
+      if (artwork && card.dataset.featuredEvent === String(featured.id) && thumb.isConnected) {
+        thumb.style.backgroundImage = `url("${artwork}")`;
+        thumb.classList.remove("is-empty");
+      }
+    });
   }
 
   if (isLive && !embedProtectionEnabled) {
