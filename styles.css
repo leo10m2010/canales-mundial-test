@@ -1455,6 +1455,72 @@ kbd {
   min-height: 74px;
 }
 
+.individual-matchup-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 16px;
+  align-items: center;
+  min-height: 92px;
+}
+
+.participant-block {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+}
+
+.participant-block:last-child {
+  grid-template-columns: minmax(0, 1fr) auto;
+  text-align: right;
+}
+
+.participant-block:last-child .participant-mark {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.participant-block:last-child .participant-name {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.participant-mark {
+  display: grid;
+  width: 54px;
+  height: 54px;
+  place-items: center;
+  overflow: hidden;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 50%;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.participant-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.participant-name {
+  color: var(--ink);
+  font-size: 0.9rem;
+  font-weight: 750;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.individual-vs {
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
 .title-event-mark {
   display: grid;
   width: 58px;
@@ -2925,6 +2991,36 @@ body.is-tv-mode .watch-button {
 
   .title-event-row {
     gap: 10px;
+  }
+
+  .individual-matchup-row {
+    gap: 8px;
+  }
+
+  .participant-block,
+  .participant-block:last-child {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    gap: 6px;
+    text-align: center;
+  }
+
+  .participant-block:last-child .participant-mark,
+  .participant-block:last-child .participant-name {
+    grid-column: 1;
+  }
+
+  .participant-block:last-child .participant-mark {
+    grid-row: 1;
+  }
+
+  .participant-block:last-child .participant-name {
+    grid-row: 2;
+  }
+
+  .participant-mark {
+    width: 46px;
+    height: 46px;
   }
 
   .title-event-mark {

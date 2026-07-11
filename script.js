@@ -103,6 +103,7 @@ const AGENDA_SPORT_ICONS = {
   cricket: "bat",
   esports: "pad",
 };
+const INDIVIDUAL_MATCHUP_SPORTS = new Set(["mma", "boxing", "combat", "tennis", "wrestling"]);
 const STREAMX_CHANNEL_CATEGORY = "streamx-247";
 const STREAMX_EVENT_CATEGORY = "streamx-event";
 const STREAMX_EVENTS_URL = "/.netlify/functions/streamx-events";
@@ -729,6 +730,7 @@ function normalizeStreamxEvents(data) {
           id: event.id || toBase64Id([title, event.time || event.datetime || event.date || "", index].join("|")),
           title,
           sportName: cleanText(sport.name || event.sport || "Deportes"),
+          sportKey: getSportKey(sport.id || sport.name || event.sport || ""),
           sportIcon: sport.icon || "",
           leagueName: event.league || league.name || "",
           eventLogo,
@@ -1039,7 +1041,7 @@ function findWorldcupGameForEvent(event) {
 
 function findSportsDbEventForEvent(event) {
   const eventDateKey = getAgendaEventDateKey(event);
-  const eventSport = getSportKey(event.sportName || event.sport || "");
+  const eventSport = event.sportKey || getSportKey(event.sportName || event.sport || "");
   const eventHome = canonicalTeamName(event.homeTeam || "");
   const eventAway = canonicalTeamName(event.awayTeam || "");
   const eventKey = eventHome && eventAway ? [eventHome, eventAway].sort().join("|") : "";
@@ -1056,7 +1058,7 @@ function findSportsDbEventForEvent(event) {
 
     const candidateSport = getSportKey(candidate.sportName || "");
 
-    if (eventSport && candidateSport && eventSport !== candidateSport) {
+    if (eventSport && candidateSport && !areCompatibleSports(eventSport, candidateSport)) {
       return false;
     }
 
@@ -1065,8 +1067,38 @@ function findSportsDbEventForEvent(event) {
     }
 
     const candidateTitle = normalizeMatchTitle(candidate.title);
-    return candidateTitle && (candidateTitle.includes(eventTitle) || eventTitle.includes(candidateTitle));
+    return candidateTitle && (
+      candidateTitle.includes(eventTitle)
+      || eventTitle.includes(candidateTitle)
+      || haveStrongTitleOverlap(eventTitle, candidateTitle)
+    );
   }) || null;
+}
+
+function areCompatibleSports(first, second) {
+  if (first === second) {
+    return true;
+  }
+
+  const combatSports = new Set(["mma", "boxing", "combat", "wrestling"]);
+  return combatSports.has(first) && combatSports.has(second);
+}
+
+function haveStrongTitleOverlap(first, second) {
+  const ignored = new Set(["vs", "the", "de", "del", "la", "el", "final", "live"]);
+  const getTokens = (value) => new Set(normalizeMatchTitle(value).split(" ")
+    .filter((token) => token.length > 2 && !ignored.has(token)));
+  const firstTokens = getTokens(first);
+  const secondTokens = getTokens(second);
+  let shared = 0;
+
+  firstTokens.forEach((token) => {
+    if (secondTokens.has(token)) {
+      shared += 1;
+    }
+  });
+
+  return shared >= 2;
 }
 
 function getSportKey(value) {
@@ -1123,7 +1155,31 @@ function getSportKey(value) {
     "e sports": "esports",
   };
 
-  return aliases[text] || text.replace(/\s+/g, "-");
+  if (aliases[text]) {
+    return aliases[text];
+  }
+
+  const words = new Set(text.split(" ").filter(Boolean));
+
+  if (words.has("american") && words.has("football")) {
+    return "american-football";
+  }
+
+  const compoundAliases = [
+    ["mma", "mma"],
+    ["ufc", "mma"],
+    ["boxing", "boxing"],
+    ["boxeo", "boxing"],
+    ["tennis", "tennis"],
+    ["tenis", "tennis"],
+    ["cycling", "cycling"],
+    ["ciclismo", "cycling"],
+    ["motor", "motorsport"],
+    ["football", "soccer"],
+    ["futbol", "soccer"],
+  ];
+  const compound = compoundAliases.find(([word]) => words.has(word));
+  return compound?.[1] || text.replace(/\s+/g, "-");
 }
 
 function normalizeMatchTitle(value) {
@@ -1360,9 +1416,13 @@ function buildAgendaEvent(streamEvent, game) {
   const leagueName = source.leagueName || source.league || source.sportName || (game ? "Copa Del Mundo 2026" : "");
   const parsedDate = source.parsedDate || game?.parsedDate || parseStreamxDate(source);
   const titleTeams = parseTeamsFromTitle(title);
-  const sourceHomeTeam = cleanText(source.homeTeam || game?.homeTeam || titleTeams.homeTeam);
-  const sourceAwayTeam = cleanText(source.awayTeam || game?.awayTeam || titleTeams.awayTeam);
+  const sourceHomeTeam = cleanText(source.homeTeam || game?.homeTeam || sportsDbEvent?.homeTeam || titleTeams.homeTeam);
+  const sourceAwayTeam = cleanText(source.awayTeam || game?.awayTeam || sportsDbEvent?.awayTeam || titleTeams.awayTeam);
   const hasTeams = Boolean(sourceHomeTeam && sourceAwayTeam);
+  const sportKey = source.sportKey || getSportKey(source.sportName || source.sport || (game ? "soccer" : ""));
+  const displayMode = hasTeams
+    ? (INDIVIDUAL_MATCHUP_SPORTS.has(sportKey) ? "individual" : "teams")
+    : "title";
   const eventLogo = firstImageUrl(source.eventLogo, source.logo, source.image, source.background);
   const leagueLogo = firstImageUrl(source.leagueLogo, source.sportLogo);
   const secondaryLogo = leagueLogo && leagueLogo !== eventLogo ? leagueLogo : "";
@@ -1379,16 +1439,20 @@ function buildAgendaEvent(streamEvent, game) {
     id: source.id || (game ? `worldcup-${game.id}` : toBase64Id(title)),
     title,
     sportName: source.sportName || (game ? "Mundial" : source.sportName),
+    sportKey,
     homeTeam: sourceHomeTeam,
     awayTeam: sourceAwayTeam,
-    homeLogo: source.homeLogo || homeFlagLogo || (!hasTeams ? eventLogo : ""),
-    awayLogo: source.awayLogo || awayFlagLogo || (!hasTeams ? secondaryLogo : ""),
+    homeLogo: firstImageUrl(source.homeLogo, homeFlagLogo, sportsDbEvent?.strHomeTeamBadge, sportsDbEvent?.strHomeTeamLogo)
+      || (!hasTeams ? eventLogo : ""),
+    awayLogo: firstImageUrl(source.awayLogo, awayFlagLogo, sportsDbEvent?.strAwayTeamBadge, sportsDbEvent?.strAwayTeamLogo)
+      || (!hasTeams ? secondaryLogo : ""),
     eventLogo,
     leagueLogo,
     leagueBadge,
     matchThumb,
     isWorldcup,
     hasTeams,
+    displayMode,
     leagueName,
     parsedDate,
     duration: Number(source.duration || 130),
@@ -1620,7 +1684,7 @@ function getAgendaSportIcon(key) {
 }
 
 function getAgendaSportKey(event) {
-  return getSportKey(getAgendaSportLabel(event)) || "deportes";
+  return event.sportKey || getSportKey(getAgendaSportLabel(event)) || "deportes";
 }
 
 function getAvailableAgendaSports(events) {
@@ -2134,9 +2198,9 @@ function createAgendaCard(event, agendaEvents = []) {
     head.append(createElement("span", "match-status live", status.label));
   }
 
-  const row = event.hasTeams
-    ? createMatchupRow(event, status)
-    : createTitleEventRow(event, status);
+  const row = event.displayMode === "individual"
+    ? createIndividualMatchupRow(event, status)
+    : (event.hasTeams ? createMatchupRow(event, status) : createTitleEventRow(event, status));
 
   const serverList = createElement("div", "server-list");
 
@@ -2170,6 +2234,37 @@ function createMatchupRow(event, status) {
     createTeamBlock(event.awayTeam || "Visitante", event.awayLogo),
   );
   return row;
+}
+
+function createIndividualMatchupRow(event, status) {
+  const row = createElement("div", "individual-matchup-row");
+  const center = createAgendaCenter(event, status);
+  center.prepend(createElement("span", "individual-vs", "VS"));
+  row.append(
+    createParticipantBlock(event.homeTeam, event.homeLogo),
+    center,
+    createParticipantBlock(event.awayTeam, event.awayLogo),
+  );
+  return row;
+}
+
+function createParticipantBlock(name, logo) {
+  const participant = createElement("div", "participant-block");
+  const mark = createElement("div", "participant-mark");
+
+  if (logo) {
+    const image = document.createElement("img");
+    image.src = logo;
+    image.alt = cleanText(name);
+    image.loading = "lazy";
+    image.onerror = () => mark.replaceChildren(document.createTextNode(makeInitials(name)));
+    mark.append(image);
+  } else {
+    mark.textContent = makeInitials(name);
+  }
+
+  participant.append(mark, createElement("span", "participant-name", cleanText(name)));
+  return participant;
 }
 
 function createTitleEventRow(event, status) {
