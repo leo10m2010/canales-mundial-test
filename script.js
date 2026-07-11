@@ -104,6 +104,27 @@ const AGENDA_SPORT_ICONS = {
   esports: "pad",
 };
 const INDIVIDUAL_MATCHUP_SPORTS = new Set(["mma", "boxing", "combat", "tennis", "wrestling"]);
+const SPORT_PALETTES = {
+  soccer: [[38, 166, 91], [218, 176, 54]],
+  mma: [[207, 42, 54], [194, 142, 48]],
+  boxing: [[211, 48, 57], [48, 92, 190]],
+  combat: [[205, 58, 45], [226, 157, 55]],
+  baseball: [[44, 92, 176], [207, 50, 63]],
+  basketball: [[222, 112, 43], [94, 54, 167]],
+  tennis: [[117, 52, 190], [19, 145, 84]],
+  motorsport: [[220, 48, 45], [35, 153, 188]],
+  "american-football": [[39, 92, 168], [204, 57, 64]],
+  volleyball: [[38, 132, 182], [230, 154, 45]],
+  rugby: [[28, 137, 82], [181, 50, 55]],
+  hockey: [[48, 115, 184], [191, 48, 55]],
+  golf: [[28, 139, 79], [193, 159, 54]],
+  cycling: [[225, 155, 42], [41, 137, 177]],
+  wrestling: [[171, 48, 142], [211, 95, 44]],
+  cricket: [[43, 143, 92], [43, 103, 174]],
+  esports: [[117, 60, 199], [35, 159, 181]],
+  worldcup: [[22, 77, 155], [183, 35, 55]],
+  generic: [[115, 65, 184], [24, 139, 93]],
+};
 const STREAMX_CHANNEL_CATEGORY = "streamx-247";
 const STREAMX_EVENT_CATEGORY = "streamx-event";
 const STREAMX_EVENTS_URL = "/.netlify/functions/streamx-events";
@@ -116,6 +137,7 @@ const STREAMX_LEGACY_HOSTS = new Set(["stream-xhd.com", "www.stream-xhd.com"]);
 const WORLDCUP_GAMES_URL = "/.netlify/functions/worldcup-games";
 const PERU_TIME_ZONE = "America/Lima";
 const DEFAULT_ALLOW = "autoplay; encrypted-media; fullscreen; picture-in-picture";
+const EMBED_SANDBOX = "allow-scripts allow-same-origin allow-forms allow-presentation allow-pointer-lock allow-orientation-lock allow-storage-access-by-user-activation";
 const DEMO_URL = "https://www.youtube.com/embed/dQw4w9WgXcQ";
 const CONTROLS_HIDE_DELAY = 2600;
 const TOAST_HIDE_DELAY = 2400;
@@ -215,6 +237,9 @@ let streamxChannelItems = [];
 let worldcupGames = [];
 let sportsDbEvents = [];
 let participantProfiles = new Map();
+const imagePaletteCache = new Map();
+const eventPaletteCache = new Map();
+let pagePaletteRequest = 0;
 let streamxLoading = false;
 let worldcupLoading = false;
 let sportsDbLoading = false;
@@ -268,6 +293,11 @@ function isLikelyTvDevice() {
   const coarseLargeScreen = isLargeLandscapeDisplay() && Boolean(window.matchMedia?.("(pointer: coarse)")?.matches);
 
   return explicitTv || (androidLargeScreen && coarseLargeScreen);
+}
+
+function isIosDevice() {
+  return /iPad|iPhone|iPod/i.test(navigator.userAgent || "")
+    || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 }
 
 function isLargeLandscapeDisplay() {
@@ -1837,6 +1867,7 @@ function renderAgendaSportTabs(sports, events, worldcupEvents = []) {
     button.classList.toggle("is-active", sport.key === selectedAgendaSport);
     button.classList.toggle("is-featured", Boolean(sport.featured));
     button.setAttribute("aria-pressed", String(sport.key === selectedAgendaSport));
+    setPaletteVariables(button, getSportPalette(sport.key === "all" ? "generic" : sport.key));
     const icon = sport.key === WORLDCUP_CATEGORY
       ? createWorldcupBadgeTile()
       : createSportIcon(sport.icon || getAgendaSportIcon(sport.key));
@@ -2017,6 +2048,7 @@ function updateHighlightsCard(events) {
     card.onclick = null;
     card.onkeydown = null;
     highlightsKey = "";
+    applyPagePalette(null);
     return;
   }
 
@@ -2029,6 +2061,8 @@ function updateHighlightsCard(events) {
   const desiredKey = isLive ? `live:${getItemKey(servers[0])}` : `static:${featured.id}`;
 
   card.hidden = false;
+  applyEventPalette(card, featured);
+  applyPagePalette(featured);
 
   // Avoid rebuilding (and reloading the live iframe) when the featured source is unchanged.
   if (desiredKey === highlightsKey && card.childElementCount) {
@@ -2250,7 +2284,9 @@ function createAgendaCard(event, agendaEvents = []) {
   const status = event.statusInfo || getAgendaStatus(event);
   const servers = event.serverItems || getEventServerItems(event);
   const playlistTitle = `Servidores de ${event.title}`;
-  const card = createElement("article", `match-card is-${status.key}`);
+  const card = createElement("article", `match-card event-card is-${status.key} is-${event.displayMode || "title"}`);
+  card.dataset.eventId = event.id;
+  applyEventPalette(card, event);
 
   const head = createElement("div", "match-head");
   const leagueRaw = cleanText(event.leagueName || "");
@@ -2262,115 +2298,150 @@ function createAgendaCard(event, agendaEvents = []) {
   }
   leagueWrap.append(createElement("span", "match-league", leagueText || "Evento"));
   head.append(leagueWrap);
-  if (status.key === "live") {
-    head.append(createElement("span", "match-status live", status.label));
-  }
+  head.append(createElement("span", `match-status ${status.key}`, status.label));
 
-  const row = event.displayMode === "individual"
-    ? createIndividualMatchupRow(event, status)
-    : (event.hasTeams ? createMatchupRow(event, status) : createTitleEventRow(event, status));
-
-  const serverList = createElement("div", "server-list");
+  const body = createElement("div", "event-card-body");
+  const summary = createEventSummary(event, status);
+  const action = createElement("div", "event-card-action");
 
   if (servers.length) {
     const watchButton = createElement("button", "watch-button");
     watchButton.type = "button";
     watchButton.dataset.tvFocusKey = `watch:${event.id}`;
-    watchButton.append(createPlayIcon(), createElement("span", "", "Ver"));
+    watchButton.append(createElement("span", "watch-button-icon", ""), createElement("span", "", "Ver transmisión"));
+    watchButton.firstElementChild.append(createPlayIcon());
     watchButton.addEventListener("click", () => openItem(servers[0], { playlist: servers, playlistTitle, match: event }));
-    serverList.append(watchButton);
+    action.append(watchButton);
   } else {
     const pending = createElement("button", "watch-button is-disabled", "No disponible");
     pending.type = "button";
     pending.dataset.tvFocusKey = `pending:${event.id}`;
     pending.disabled = true;
-    serverList.append(pending);
+    action.append(pending);
   }
 
-  card.append(head, row, serverList);
+  body.append(createEventVisual(event), summary, action);
+  card.append(head, body);
   return card;
 }
 
-function createMatchupRow(event, status) {
-  const row = createElement("div", "match-row");
-  const [homeScore, awayScore] = getAgendaScorePair(event);
-  row.append(
-    createTeamBlock(event.homeTeam || "Local", event.homeLogo),
-    createElement("span", "match-score", homeScore),
-    createAgendaCenter(event, status),
-    createElement("span", "match-score", awayScore),
-    createTeamBlock(event.awayTeam || "Visitante", event.awayLogo),
-  );
-  return row;
+function getEventDisplayCopy(event) {
+  if (event.hasTeams) {
+    return {
+      title: `${event.homeTeam} vs ${event.awayTeam}`,
+      context: "",
+    };
+  }
+
+  const rawTitle = cleanText(event.title || "Evento");
+  const league = cleanText(event.leagueName || event.sportName || "");
+  const separator = rawTitle.includes(" - ") ? " - " : (rawTitle.includes(": ") ? ": " : "");
+
+  if (!separator) {
+    return { title: rawTitle, context: "" };
+  }
+
+  const parts = rawTitle.split(separator).map(cleanText).filter(Boolean);
+  const title = parts.pop() || rawTitle;
+  let context = parts.join(separator);
+
+  if (league && normalizeText(context).startsWith(normalizeText(league))) {
+    context = cleanText(context.slice(league.length)).replace(/^[-·:]+\s*/, "");
+  }
+
+  return { title, context };
 }
 
-function createIndividualMatchupRow(event, status) {
-  const row = createElement("div", "individual-matchup-row");
-  const center = createAgendaCenter(event, status);
-  center.prepend(createElement("span", "individual-vs", "VS"));
-  row.append(
-    createParticipantBlock(event.homeTeam, event.homeLogo, event.homeProfile),
-    center,
-    createParticipantBlock(event.awayTeam, event.awayLogo, event.awayProfile),
-  );
-  return row;
+function createEventSummary(event, status) {
+  const summary = createElement("div", "event-card-summary");
+  const copy = getEventDisplayCopy(event);
+  const meta = createElement("div", "event-card-meta");
+  const league = cleanText(event.leagueName || event.sportName || "Evento");
+
+  meta.append(createElement("span", "", league));
+  if (copy.context) {
+    meta.append(createElement("span", "event-meta-dot", ""), createElement("span", "", copy.context.replace(/#/g, "")));
+  }
+
+  const title = createElement("h3", "event-card-title", copy.title);
+  title.title = cleanText(event.title || copy.title);
+  summary.append(title, meta);
+
+  if (event.displayMode === "teams" && status.key !== "upcoming") {
+    const [homeScore, awayScore] = getAgendaScorePair(event);
+    if (homeScore !== "-" && awayScore !== "-") {
+      summary.append(createElement("div", "event-scoreline", `${homeScore} — ${awayScore}`));
+    }
+  }
+
+  const timing = createElement("div", `event-timing is-${status.key}`);
+  timing.append(createElement("span", "event-timing-dot", ""));
+  const timingText = status.key === "live"
+    ? "Ahora en juego"
+    : (status.key === "finished" ? "Evento finalizado" : `${formatAgendaTime(event)} · ${formatAgendaDayShort(event)}`);
+  timing.append(createElement("span", "", timingText));
+  summary.append(timing);
+
+  const credits = [event.homeProfile, event.awayProfile].filter((profile, index, profiles) => (
+    profile?.source && profile?.sourceUrl && profiles.findIndex((item) => item?.sourceUrl === profile.sourceUrl) === index
+  ));
+  if (credits.length) {
+    const creditRow = createElement("div", "event-photo-credits");
+    credits.forEach((profile) => {
+      const credit = createElement("a", "", `Foto: ${profile.source}`);
+      credit.href = profile.sourceUrl;
+      credit.target = "_blank";
+      credit.rel = "noopener noreferrer";
+      creditRow.append(credit);
+    });
+    summary.append(creditRow);
+  }
+
+  return summary;
 }
 
-function createParticipantBlock(name, logo, profile) {
-  const participant = createElement("div", "participant-block");
-  const mark = createElement("div", "participant-mark");
+function createEventVisual(event) {
+  const visual = createElement("div", `event-card-visual is-${event.displayMode || "title"}`);
+
+  if (event.hasTeams) {
+    visual.append(
+      createEventVisualMark(event.homeTeam, event.homeLogo, "is-home"),
+      createElement("span", "event-visual-vs", "VS"),
+      createEventVisualMark(event.awayTeam, event.awayLogo, "is-away"),
+    );
+    return visual;
+  }
+
+  const logo = firstImageUrl(event.eventLogo, event.leagueLogo);
+  if (logo) {
+    const image = document.createElement("img");
+    image.src = logo;
+    image.alt = cleanText(event.leagueName || event.title || "Evento");
+    image.loading = "lazy";
+    image.onerror = () => visual.replaceChildren(createSportIcon(getAgendaSportIcon(getAgendaSportKey(event))));
+    visual.append(image);
+  } else {
+    visual.append(createSportIcon(getAgendaSportIcon(getAgendaSportKey(event))));
+  }
+
+  return visual;
+}
+
+function createEventVisualMark(name, logo, className) {
+  const mark = createElement("span", `event-visual-mark ${className}`);
   mark.textContent = makeInitials(name);
 
   if (logo) {
     const image = document.createElement("img");
+    image.src = logo;
     image.alt = cleanText(name);
     image.loading = "lazy";
-    image.title = profile?.source ? `Foto: ${profile.source}` : "";
     image.onload = () => mark.classList.add("has-image");
     image.onerror = () => image.remove();
-    image.src = logo;
     mark.append(image);
   }
 
-  const copy = createElement("div", "participant-copy");
-  copy.append(createElement("span", "participant-name", cleanText(name)));
-
-  if (profile?.source && profile?.sourceUrl) {
-    const credit = createElement("a", "participant-source", `Foto: ${profile.source}`);
-    credit.href = profile.sourceUrl;
-    credit.target = "_blank";
-    credit.rel = "noopener noreferrer";
-    copy.append(credit);
-  }
-
-  participant.append(mark, copy);
-  return participant;
-}
-
-function createTitleEventRow(event, status) {
-  const row = createElement("div", "title-event-row");
-  const mark = createElement("div", "title-event-mark");
-  const logo = firstImageUrl(event.eventLogo, event.leagueLogo);
-
-  if (logo) {
-    const image = document.createElement("img");
-    image.src = logo;
-    image.alt = "";
-    image.loading = "lazy";
-    image.onerror = () => mark.replaceChildren(createSportIcon(getAgendaSportIcon(getAgendaSportKey(event))));
-    mark.append(image);
-  } else {
-    mark.append(createSportIcon(getAgendaSportIcon(getAgendaSportKey(event))));
-  }
-
-  const copy = createElement("div", "title-event-copy");
-  copy.append(createElement("h3", "title-event-name", event.title || "Evento"));
-  if (event.note) {
-    copy.append(createElement("p", "title-event-note", cleanText(event.note)));
-  }
-
-  row.append(mark, copy, createAgendaCenter(event, status));
-  return row;
+  return mark;
 }
 
 function getAgendaStatus(event) {
@@ -2450,55 +2521,6 @@ function restoreTvHomeFocus(activeFocusKey) {
   }, 0);
 }
 
-function createTeamBlock(name, logo, hasTeams = true) {
-  const team = createElement("div", "team-block");
-  const mark = createElement("div", "team-mark");
-  const abbr = makeTeamAbbr(name);
-  const isPlaceholder = !hasTeams || /^(w\d+|l\d+|tbd|ganador|por definir|winner)/i.test(cleanText(name));
-
-  if (logo && !isPlaceholder) {
-    const image = document.createElement("img");
-    image.src = logo;
-    image.alt = name;
-    image.loading = "lazy";
-    image.onerror = () => {
-      mark.classList.add("is-fallback");
-      mark.replaceChildren(document.createTextNode(abbr));
-    };
-    mark.append(image);
-  } else if (isPlaceholder) {
-    mark.classList.add("is-placeholder");
-    mark.append(createTrophyIcon());
-  } else {
-    mark.classList.add("is-fallback");
-    mark.textContent = abbr;
-  }
-
-  const label = createElement("span", "team-name", abbr);
-  label.title = cleanText(name);
-  team.append(mark, label);
-  return team;
-}
-
-function makeTeamAbbr(name) {
-  const clean = cleanText(name).replace(/[^0-9A-Za-zÀ-ÿ ]/g, "");
-  if (!clean) return "TBD";
-  if (/^[wl]\d+$/i.test(clean)) return clean.toUpperCase();
-  return clean.replace(/\s+/g, "").slice(0, 3).toUpperCase();
-}
-
-function createTrophyIcon() {
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("viewBox", "0 0 24 24");
-  svg.setAttribute("class", "trophy-icon");
-  svg.setAttribute("aria-hidden", "true");
-  const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-  path.setAttribute("d", "M18 4h2a2 2 0 0 1 2 2 5 5 0 0 1-4.09 4.91A6 6 0 0 1 13 14.92V17h3v2H8v-2h3v-2.08A6 6 0 0 1 6.09 10.9 5 5 0 0 1 2 6a2 2 0 0 1 2-2h2V3h12v1ZM6 6H4a3 3 0 0 0 2 2.83V6Zm14 0h-2v2.83A3 3 0 0 0 20 6Z");
-  path.setAttribute("fill", "currentColor");
-  svg.append(path);
-  return svg;
-}
-
 function getAgendaScorePair(event) {
   const game = event.worldcupGame;
 
@@ -2518,28 +2540,6 @@ function getAgendaScorePair(event) {
   }
 
   return ["-", "-"];
-}
-
-function createAgendaCenter(event, status) {
-  const center = createElement("div", `match-center is-${status.key}`);
-
-  if (status.key === "finished") {
-    center.append(createElement("span", "match-center-status", "Final"));
-    center.append(createElement("span", "match-center-sub", "FT"));
-    return center;
-  }
-
-  if (status.key === "live") {
-    const game = event.worldcupGame;
-    const elapsed = game ? cleanText(game.time_elapsed || "") : "";
-    center.append(createElement("span", "match-center-status", "En vivo"));
-    center.append(createElement("span", "match-center-sub", elapsed && elapsed !== "live" ? elapsed : "en juego"));
-    return center;
-  }
-
-  center.append(createElement("span", "match-center-status", formatAgendaTime(event)));
-  center.append(createElement("span", "match-center-sub", formatAgendaDayShort(event)));
-  return center;
 }
 
 function formatAgendaDayShort(event) {
@@ -2778,6 +2778,157 @@ function firstImageUrl(...values) {
     .find(isUrl) || "";
 }
 
+function getSportPalette(sportKey) {
+  return SPORT_PALETTES[sportKey] || SPORT_PALETTES.generic;
+}
+
+function getEventPaletteSources(event) {
+  if (event.hasTeams) {
+    return [
+      firstImageUrl(event.homeLogo, event.eventLogo, event.leagueLogo),
+      firstImageUrl(event.awayLogo, event.leagueLogo, event.eventLogo),
+    ].filter(Boolean);
+  }
+
+  return [firstImageUrl(event.eventLogo, event.leagueLogo, event.sportLogo)].filter(Boolean);
+}
+
+function colorDistance(first, second) {
+  return Math.hypot(first[0] - second[0], first[1] - second[1], first[2] - second[2]);
+}
+
+function getColorSaturation([red, green, blue]) {
+  const max = Math.max(red, green, blue) / 255;
+  const min = Math.min(red, green, blue) / 255;
+  const lightness = (max + min) / 2;
+  return max === min ? 0 : (max - min) / (1 - Math.abs(2 * lightness - 1));
+}
+
+function extractImagePalette(url) {
+  if (!url) {
+    return Promise.resolve([]);
+  }
+
+  if (imagePaletteCache.has(url)) {
+    return imagePaletteCache.get(url);
+  }
+
+  const request = new Promise((resolve) => {
+    const image = new Image();
+    const timeout = window.setTimeout(() => resolve([]), 6000);
+
+    image.crossOrigin = "anonymous";
+    image.referrerPolicy = "no-referrer";
+    image.onload = () => {
+      window.clearTimeout(timeout);
+
+      try {
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d", { willReadFrequently: true });
+        const size = 48;
+        canvas.width = size;
+        canvas.height = size;
+        context.drawImage(image, 0, 0, size, size);
+        const pixels = context.getImageData(0, 0, size, size).data;
+        const buckets = new Map();
+
+        for (let index = 0; index < pixels.length; index += 16) {
+          const alpha = pixels[index + 3];
+          if (alpha < 160) continue;
+
+          const color = [pixels[index], pixels[index + 1], pixels[index + 2]];
+          const lightness = (Math.max(...color) + Math.min(...color)) / 510;
+          const saturation = getColorSaturation(color);
+          if (lightness < 0.14 || lightness > 0.88 || saturation < 0.2) continue;
+
+          const quantized = color.map((channel) => Math.round(channel / 32) * 32);
+          const key = quantized.join(",");
+          const current = buckets.get(key) || { color: quantized, weight: 0 };
+          current.weight += 1 + saturation * 2;
+          buckets.set(key, current);
+        }
+
+        const ranked = Array.from(buckets.values()).sort((a, b) => b.weight - a.weight);
+        const palette = [];
+        ranked.forEach(({ color }) => {
+          if (palette.length < 2 && palette.every((selected) => colorDistance(selected, color) > 72)) {
+            palette.push(color.map((channel) => Math.max(24, Math.min(232, channel))));
+          }
+        });
+        resolve(palette);
+      } catch (error) {
+        resolve([]);
+      }
+    };
+    image.onerror = () => {
+      window.clearTimeout(timeout);
+      resolve([]);
+    };
+    image.src = url;
+  });
+
+  imagePaletteCache.set(url, request);
+  return request;
+}
+
+async function resolveEventPalette(event) {
+  const sources = getEventPaletteSources(event);
+  const cacheKey = `${event.id}|${sources.join("|")}`;
+
+  if (eventPaletteCache.has(cacheKey)) {
+    return eventPaletteCache.get(cacheKey);
+  }
+
+  const request = (async () => {
+    const fallback = getSportPalette(getAgendaSportKey(event));
+    const palettes = await Promise.all(sources.map(extractImagePalette));
+
+    if (event.hasTeams && palettes.length > 1) {
+      return [palettes[0][0] || fallback[0], palettes[1][0] || fallback[1]];
+    }
+
+    const extracted = palettes[0] || [];
+    return [extracted[0] || fallback[0], extracted[1] || fallback[1]];
+  })();
+
+  eventPaletteCache.set(cacheKey, request);
+  return request;
+}
+
+function setPaletteVariables(element, palette, prefix = "event") {
+  const [first, second] = palette;
+  const setColor = (name, color) => {
+    element.style.setProperty(`--${prefix}-${name}`, `rgb(${color.join(", ")})`);
+    element.style.setProperty(`--${prefix}-${name}-soft`, `rgba(${color.join(", ")}, 0.16)`);
+    element.style.setProperty(`--${prefix}-${name}-glow`, `rgba(${color.join(", ")}, 0.32)`);
+  };
+  setColor("a", first);
+  setColor("b", second);
+}
+
+function applyEventPalette(element, event) {
+  const fallback = getSportPalette(getAgendaSportKey(event));
+  setPaletteVariables(element, fallback);
+  resolveEventPalette(event).then((palette) => {
+    if (element.isConnected) {
+      setPaletteVariables(element, palette);
+    }
+  });
+}
+
+function applyPagePalette(event) {
+  const requestId = ++pagePaletteRequest;
+  const fallback = getSportPalette(event ? getAgendaSportKey(event) : "generic");
+  setPaletteVariables(document.documentElement, fallback, "page");
+
+  if (!event) return;
+  resolveEventPalette(event).then((palette) => {
+    if (requestId === pagePaletteRequest) {
+      setPaletteVariables(document.documentElement, palette, "page");
+    }
+  });
+}
+
 function cleanText(value) {
   return String(value ?? "").trim().replace(/\s+/g, " ");
 }
@@ -2820,7 +2971,7 @@ function extractIframeTitle(value) {
 }
 
 function buildIframe(src, title = "Player embed") {
-  return `<iframe src="${escapeAttribute(src)}" title="${escapeAttribute(title)}" width="100%" height="100%" frameborder="0" scrolling="no" allow="${DEFAULT_ALLOW}" allowfullscreen></iframe>`;
+  return `<iframe src="${escapeAttribute(src)}" title="${escapeAttribute(title)}" width="100%" height="100%" frameborder="0" scrolling="no" allow="${DEFAULT_ALLOW}" sandbox="${EMBED_SANDBOX}" allowfullscreen webkitallowfullscreen></iframe>`;
 }
 
 function normalizeEmbed(value) {
@@ -2845,7 +2996,6 @@ function getEmbedSrc(value) {
 
 function createEmbedFrame(src, title = "Player embed") {
   const frame = document.createElement("iframe");
-  frame.src = src;
   frame.title = cleanText(title) || "Player embed";
   frame.width = "100%";
   frame.height = "100%";
@@ -2853,6 +3003,12 @@ function createEmbedFrame(src, title = "Player embed") {
   frame.scrolling = "no";
   frame.allow = DEFAULT_ALLOW;
   frame.allowFullscreen = true;
+  frame.setAttribute("sandbox", EMBED_SANDBOX);
+  frame.setAttribute("webkitallowfullscreen", "true");
+  frame.setAttribute("allowtransparency", "true");
+  frame.setAttribute("playsinline", "true");
+  frame.referrerPolicy = "no-referrer";
+  frame.src = src;
   return frame;
 }
 
@@ -2870,8 +3026,21 @@ function prepareEmbeds(container) {
 
     frame.setAttribute("allow", Array.from(permissions).join("; "));
     frame.setAttribute("title", frame.getAttribute("title") || "Player embed");
+    frame.setAttribute("sandbox", EMBED_SANDBOX);
     frame.setAttribute("allowfullscreen", "true");
+    frame.setAttribute("webkitallowfullscreen", "true");
+    frame.setAttribute("playsinline", "true");
+    frame.setAttribute("referrerpolicy", "no-referrer");
   });
+}
+
+function createIosPlaybackHint() {
+  const hint = createElement("div", "ios-playback-hint");
+  hint.append(
+    createPlayIcon(),
+    createElement("span", "", "Toca el reproductor para iniciar el video")
+  );
+  return hint;
 }
 
 function createElement(tagName, className, text) {
@@ -3595,48 +3764,69 @@ function toggleIframeControl() {
 }
 
 async function enterFullscreen() {
-  if (document.fullscreenElement || !dom.player.requestFullscreen) {
+  if (isIosDevice()) {
+    dom.player.classList.add("is-ios-expanded");
+    syncFullscreenButton();
+    return;
+  }
+
+  const fullscreenElement = document.fullscreenElement || document.webkitFullscreenElement;
+  const requestFullscreen = dom.player.requestFullscreen || dom.player.webkitRequestFullscreen;
+
+  if (fullscreenElement || !requestFullscreen) {
     return;
   }
 
   try {
-    await dom.player.requestFullscreen();
+    await requestFullscreen.call(dom.player);
   } catch (error) {
     // Browsers can reject fullscreen unless the user gesture is direct.
   }
 }
 
 async function toggleFullscreen() {
-  if (document.fullscreenElement) {
-    if (document.exitFullscreen) {
-      await document.exitFullscreen();
+  if (isIosDevice()) {
+    dom.player.classList.toggle("is-ios-expanded");
+    syncFullscreenButton();
+    return;
+  }
+
+  const fullscreenElement = document.fullscreenElement || document.webkitFullscreenElement;
+  const exitFullscreen = document.exitFullscreen || document.webkitExitFullscreen;
+
+  if (fullscreenElement) {
+    if (exitFullscreen) {
+      await exitFullscreen.call(document);
     }
 
     return;
   }
 
-  if (!dom.player.requestFullscreen) {
+  const requestFullscreen = dom.player.requestFullscreen || dom.player.webkitRequestFullscreen;
+
+  if (!requestFullscreen) {
     return;
   }
 
   try {
-    await dom.player.requestFullscreen();
+    await requestFullscreen.call(dom.player);
   } catch (error) {
     // Browsers can reject fullscreen unless the user gesture is direct.
   }
 }
 
 function syncFullscreenButton() {
-  const isFullscreen = Boolean(document.fullscreenElement);
-  const label = isFullscreen ? "Salir de pantalla completa" : "Pantalla completa";
+  const nativeFullscreen = Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+  const isExpanded = nativeFullscreen || dom.player.classList.contains("is-ios-expanded");
+  const label = isExpanded ? "Salir de pantalla completa" : "Pantalla completa";
   const title = `${label} (F)`;
 
   dom.fullscreenButton.setAttribute("aria-label", label);
   dom.fullscreenButton.setAttribute("title", title);
-  dom.fullscreenButton.classList.toggle("is-active", isFullscreen);
-  dom.player.classList.toggle("is-fullscreen", isFullscreen);
+  dom.fullscreenButton.classList.toggle("is-active", isExpanded);
+  dom.player.classList.toggle("is-fullscreen", isExpanded);
 
-  if (isFullscreen) {
+  if (nativeFullscreen) {
     revealControls();
   } else {
     window.clearTimeout(controlsHideTimer);
@@ -3778,8 +3968,17 @@ async function openPlayer(embed, options = {}) {
   getPaneState(paneId).sourceKey = options.sourceKey || "";
   const posterMatch = getPaneState(paneId).match;
   const posterUrl = firstImageUrl(posterMatch?.matchThumb, posterMatch?.eventLogo, posterMatch?.leagueBadge);
+  const iosHint = isIosDevice() ? createIosPlaybackHint() : null;
+
+  if (iosHint) {
+    frame.addEventListener("load", () => iosHint.classList.add("is-ready"), { once: true });
+  }
+
   paneStage.style.backgroundImage = posterUrl ? `url("${posterUrl}")` : "";
-  paneStage.replaceChildren(frame);
+  paneStage.replaceChildren(...[frame, iosHint].filter(Boolean));
+  if (posterMatch) {
+    applyEventPalette(paneStage, posterMatch);
+  }
 
   if (paneId === PLAYER_PANES.SECONDARY) {
     dom.secondaryPlayerPane.hidden = false;
@@ -3899,9 +4098,12 @@ function openSplitItems(primaryItem, secondaryItem, options = {}) {
 }
 
 async function closePlayer(options = {}) {
-  if (document.fullscreenElement && document.exitFullscreen) {
+  const fullscreenElement = document.fullscreenElement || document.webkitFullscreenElement;
+  const exitFullscreen = document.exitFullscreen || document.webkitExitFullscreen;
+
+  if (fullscreenElement && exitFullscreen) {
     try {
-      await document.exitFullscreen();
+      await exitFullscreen.call(document);
     } catch (error) {
       // Continue closing the player even if the browser rejects fullscreen exit.
     }
@@ -3916,7 +4118,8 @@ async function closePlayer(options = {}) {
   dom.playerStage.style.backgroundImage = "";
   dom.secondaryPlayerStage.style.backgroundImage = "";
   dom.secondaryPlayerPane.hidden = true;
-  dom.player.classList.remove("is-idle", "is-fullscreen");
+  dom.player.classList.remove("is-idle", "is-fullscreen", "is-ios-expanded");
+  syncFullscreenButton();
   dom.channelToast.classList.remove("is-visible");
   playerPaneStates[PLAYER_PANES.PRIMARY] = createPaneState();
   playerPaneStates[PLAYER_PANES.SECONDARY] = createPaneState();
@@ -4406,6 +4609,7 @@ function bindEvents() {
     }
   });
   document.addEventListener("fullscreenchange", syncFullscreenButton);
+  document.addEventListener("webkitfullscreenchange", syncFullscreenButton);
   window.addEventListener("popstate", handlePlayerPopState);
 
   document.addEventListener("keydown", (event) => {
