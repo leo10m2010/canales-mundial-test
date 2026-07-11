@@ -1481,12 +1481,13 @@ kbd {
   grid-row: 1;
 }
 
-.participant-block:last-child .participant-name {
+.participant-block:last-child .participant-copy {
   grid-column: 1;
   grid-row: 1;
 }
 
 .participant-mark {
+  position: relative;
   display: grid;
   width: 54px;
   height: 54px;
@@ -1501,17 +1502,45 @@ kbd {
 }
 
 .participant-mark img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.participant-mark.has-image img {
+  opacity: 1;
 }
 
 .participant-name {
+  display: block;
   color: var(--ink);
   font-size: 0.9rem;
   font-weight: 750;
   line-height: 1.2;
   overflow-wrap: anywhere;
+}
+
+.participant-copy {
+  min-width: 0;
+}
+
+.participant-source {
+  display: inline-block;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 0.58rem;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.participant-source:hover,
+.participant-source:focus-visible {
+  color: var(--ink);
+  text-decoration: underline;
 }
 
 .individual-vs {
@@ -3006,7 +3035,7 @@ body.is-tv-mode .watch-button {
   }
 
   .participant-block:last-child .participant-mark,
-  .participant-block:last-child .participant-name {
+  .participant-block:last-child .participant-copy {
     grid-column: 1;
   }
 
@@ -3014,7 +3043,7 @@ body.is-tv-mode .watch-button {
     grid-row: 1;
   }
 
-  .participant-block:last-child .participant-name {
+  .participant-block:last-child .participant-copy {
     grid-row: 2;
   }
 

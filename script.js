@@ -109,6 +109,7 @@ const STREAMX_EVENT_CATEGORY = "streamx-event";
 const STREAMX_EVENTS_URL = "/.netlify/functions/streamx-events";
 const STREAMX_CHANNELS_URL = "/.netlify/functions/streamx-channels";
 const THESPORTSDB_EVENTS_URL = "/.netlify/functions/thesportsdb-events";
+const PARTICIPANT_PROFILES_URL = "/.netlify/functions/participant-profiles";
 const STREAMX_CANONICAL_HOST = "streamx-hd.com";
 const STREAMX_CANONICAL_ORIGIN = `https://${STREAMX_CANONICAL_HOST}`;
 const STREAMX_LEGACY_HOSTS = new Set(["stream-xhd.com", "www.stream-xhd.com"]);
@@ -213,6 +214,7 @@ let streamxEvents = [];
 let streamxChannelItems = [];
 let worldcupGames = [];
 let sportsDbEvents = [];
+let participantProfiles = new Map();
 let streamxLoading = false;
 let worldcupLoading = false;
 let sportsDbLoading = false;
@@ -598,7 +600,10 @@ async function loadStreamxSchedule(options = {}) {
   renderChannelSwitcher();
 
   if (!streamxError) {
-    await loadSportsDbEvents({ forceRefresh: options.forceRefresh });
+    await Promise.allSettled([
+      loadSportsDbEvents({ forceRefresh: options.forceRefresh }),
+      loadParticipantProfiles(),
+    ]);
   }
 
   if (options.announce && !streamxError) {
@@ -656,6 +661,63 @@ async function loadSportsDbEvents(options = {}) {
 
   sportsDbLoading = false;
   renderAgenda();
+}
+
+function getParticipantProfileKey(name, sportKey) {
+  return `${sportKey}|${normalizeText(name)}`;
+}
+
+function getParticipantProfile(name, sportKey) {
+  return participantProfiles.get(getParticipantProfileKey(name, sportKey)) || null;
+}
+
+function getParticipantProfileRequests() {
+  const requests = new Map();
+
+  streamxEvents.forEach((event) => {
+    const sportKey = event.sportKey || getSportKey(event.sportName || event.sport || "");
+
+    if (!INDIVIDUAL_MATCHUP_SPORTS.has(sportKey)) {
+      return;
+    }
+
+    const titleTeams = parseTeamsFromTitle(event.title);
+    [event.homeTeam || titleTeams.homeTeam, event.awayTeam || titleTeams.awayTeam].forEach((name) => {
+      const cleanName = cleanText(name);
+
+      if (cleanName) {
+        requests.set(getParticipantProfileKey(cleanName, sportKey), { name: cleanName, sport: sportKey });
+      }
+    });
+  });
+
+  return Array.from(requests.values()).slice(0, 12);
+}
+
+async function loadParticipantProfiles(options = {}) {
+  const people = getParticipantProfileRequests();
+
+  if (!people.length) {
+    return;
+  }
+
+  try {
+    const data = await fetchJson(`${PARTICIPANT_PROFILES_URL}?people=${encodeURIComponent(JSON.stringify(people))}`, {
+      forceRefresh: options.forceRefresh,
+    });
+    const nextProfiles = new Map(participantProfiles);
+
+    (data?.profiles || []).forEach((profile) => {
+      if (profile?.query && profile?.sport) {
+        nextProfiles.set(getParticipantProfileKey(profile.query, profile.sport), profile);
+      }
+    });
+
+    participantProfiles = nextProfiles;
+    renderAgenda();
+  } catch (error) {
+    // Participant photos are optional; initials remain as the visual fallback.
+  }
 }
 
 async function fetchJson(url, options = {}) {
@@ -1416,10 +1478,14 @@ function buildAgendaEvent(streamEvent, game) {
   const leagueName = source.leagueName || source.league || source.sportName || (game ? "Copa Del Mundo 2026" : "");
   const parsedDate = source.parsedDate || game?.parsedDate || parseStreamxDate(source);
   const titleTeams = parseTeamsFromTitle(title);
-  const sourceHomeTeam = cleanText(source.homeTeam || game?.homeTeam || sportsDbEvent?.homeTeam || titleTeams.homeTeam);
-  const sourceAwayTeam = cleanText(source.awayTeam || game?.awayTeam || sportsDbEvent?.awayTeam || titleTeams.awayTeam);
-  const hasTeams = Boolean(sourceHomeTeam && sourceAwayTeam);
   const sportKey = source.sportKey || getSportKey(source.sportName || source.sport || (game ? "soccer" : ""));
+  const rawHomeTeam = cleanText(source.homeTeam || game?.homeTeam || titleTeams.homeTeam);
+  const rawAwayTeam = cleanText(source.awayTeam || game?.awayTeam || titleTeams.awayTeam);
+  const homeProfile = getParticipantProfile(rawHomeTeam, sportKey);
+  const awayProfile = getParticipantProfile(rawAwayTeam, sportKey);
+  const sourceHomeTeam = cleanText(source.homeTeam || game?.homeTeam || sportsDbEvent?.homeTeam || homeProfile?.name || titleTeams.homeTeam);
+  const sourceAwayTeam = cleanText(source.awayTeam || game?.awayTeam || sportsDbEvent?.awayTeam || awayProfile?.name || titleTeams.awayTeam);
+  const hasTeams = Boolean(sourceHomeTeam && sourceAwayTeam);
   const displayMode = hasTeams
     ? (INDIVIDUAL_MATCHUP_SPORTS.has(sportKey) ? "individual" : "teams")
     : "title";
@@ -1442,10 +1508,12 @@ function buildAgendaEvent(streamEvent, game) {
     sportKey,
     homeTeam: sourceHomeTeam,
     awayTeam: sourceAwayTeam,
-    homeLogo: firstImageUrl(source.homeLogo, homeFlagLogo, sportsDbEvent?.strHomeTeamBadge, sportsDbEvent?.strHomeTeamLogo)
+    homeLogo: firstImageUrl(source.homeLogo, homeFlagLogo, sportsDbEvent?.strHomeTeamBadge, sportsDbEvent?.strHomeTeamLogo, homeProfile?.image)
       || (!hasTeams ? eventLogo : ""),
-    awayLogo: firstImageUrl(source.awayLogo, awayFlagLogo, sportsDbEvent?.strAwayTeamBadge, sportsDbEvent?.strAwayTeamLogo)
+    awayLogo: firstImageUrl(source.awayLogo, awayFlagLogo, sportsDbEvent?.strAwayTeamBadge, sportsDbEvent?.strAwayTeamLogo, awayProfile?.image)
       || (!hasTeams ? secondaryLogo : ""),
+    homeProfile,
+    awayProfile,
     eventLogo,
     leagueLogo,
     leagueBadge,
@@ -2241,29 +2309,41 @@ function createIndividualMatchupRow(event, status) {
   const center = createAgendaCenter(event, status);
   center.prepend(createElement("span", "individual-vs", "VS"));
   row.append(
-    createParticipantBlock(event.homeTeam, event.homeLogo),
+    createParticipantBlock(event.homeTeam, event.homeLogo, event.homeProfile),
     center,
-    createParticipantBlock(event.awayTeam, event.awayLogo),
+    createParticipantBlock(event.awayTeam, event.awayLogo, event.awayProfile),
   );
   return row;
 }
 
-function createParticipantBlock(name, logo) {
+function createParticipantBlock(name, logo, profile) {
   const participant = createElement("div", "participant-block");
   const mark = createElement("div", "participant-mark");
+  mark.textContent = makeInitials(name);
 
   if (logo) {
     const image = document.createElement("img");
-    image.src = logo;
     image.alt = cleanText(name);
     image.loading = "lazy";
-    image.onerror = () => mark.replaceChildren(document.createTextNode(makeInitials(name)));
+    image.title = profile?.source ? `Foto: ${profile.source}` : "";
+    image.onload = () => mark.classList.add("has-image");
+    image.onerror = () => image.remove();
+    image.src = logo;
     mark.append(image);
-  } else {
-    mark.textContent = makeInitials(name);
   }
 
-  participant.append(mark, createElement("span", "participant-name", cleanText(name)));
+  const copy = createElement("div", "participant-copy");
+  copy.append(createElement("span", "participant-name", cleanText(name)));
+
+  if (profile?.source && profile?.sourceUrl) {
+    const credit = createElement("a", "participant-source", `Foto: ${profile.source}`);
+    credit.href = profile.sourceUrl;
+    credit.target = "_blank";
+    credit.rel = "noopener noreferrer";
+    copy.append(credit);
+  }
+
+  participant.append(mark, copy);
   return participant;
 }
 
