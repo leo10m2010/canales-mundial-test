@@ -874,6 +874,7 @@ h1 {
   height: 100%;
   border: 0;
   opacity: 0;
+  pointer-events: none;
   transition: opacity 0.35s ease;
 }
 

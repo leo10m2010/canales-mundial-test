@@ -151,6 +151,7 @@ const STREAMX_REFRESH_INTERVAL = 120000;
 const CHANNELS_REFRESH_INTERVAL = 600000;
 const CLIENT_FETCH_TIMEOUT_MS = 10000;
 const UPCOMING_LIVE_CHECK_WINDOW = 45 * 60000;
+const BILLBOARD_PREVIEW_TIMEOUT = 12000;
 const PLAYER_MODES = { PC: "pc", TV: "tv" };
 const PLAYER_PANES = { PRIMARY: "primary", SECONDARY: "secondary" };
 const SIMULTANEOUS_MATCH_TOLERANCE = 15 * 60000;
@@ -265,7 +266,7 @@ const playerPaneStates = {
 let activePaneId = PLAYER_PANES.PRIMARY;
 let channelSwitcherTargetPaneId = "";
 let tvOverlayLocked = true;
-let embedProtectionEnabled = true;
+let embedProtectionEnabled = false;
 let tvHomeFocusInitialized = false;
 let playerHistoryActive = false;
 let ignoreNextPopState = false;
@@ -2038,6 +2039,18 @@ function stopHighlightsPlayer() {
   }
 }
 
+function makeBillboardPreviewUrl(sourceUrl) {
+  try {
+    const url = new URL(sourceUrl);
+    url.searchParams.set("autoplay", "1");
+    url.searchParams.set("muted", "1");
+    url.searchParams.set("playsinline", "1");
+    return url.href;
+  } catch (error) {
+    return sourceUrl;
+  }
+}
+
 let highlightsKey = "";
 
 function updateHighlightsCard(events) {
@@ -2087,10 +2100,27 @@ function updateHighlightsCard(events) {
     thumb.classList.add("is-empty");
   }
 
-  if (isLive) {
-    const frame = createEmbedFrame(servers[0].sourceUrl, title);
+  if (isLive && !embedProtectionEnabled) {
+    const frame = createEmbedFrame(makeBillboardPreviewUrl(servers[0].sourceUrl), title);
+    let loaded = false;
+    const previewTimeout = window.setTimeout(() => {
+      if (!loaded) {
+        frame.remove();
+        thumb.classList.remove("is-player-ready");
+      }
+    }, BILLBOARD_PREVIEW_TIMEOUT);
     frame.classList.add("highlights-frame");
-    frame.addEventListener("load", () => thumb.classList.add("is-player-ready"), { once: true });
+    frame.setAttribute("aria-hidden", "true");
+    frame.addEventListener("load", () => {
+      loaded = true;
+      window.clearTimeout(previewTimeout);
+      window.setTimeout(() => thumb.classList.add("is-player-ready"), 500);
+    }, { once: true });
+    frame.addEventListener("error", () => {
+      window.clearTimeout(previewTimeout);
+      frame.remove();
+      thumb.classList.remove("is-player-ready");
+    }, { once: true });
     thumb.append(frame);
   }
   card.append(thumb);
@@ -3798,6 +3828,9 @@ function toggleEmbedProtection() {
   syncEmbedSecurityButton();
   reloadPlayerFramesForSecurityMode();
   highlightsKey = "";
+  if (dom.player.hidden) {
+    renderAgenda();
+  }
 
   showChannelToast({
     sourceName: embedProtectionEnabled ? "Protección anti-popup" : "Modo compatible",
