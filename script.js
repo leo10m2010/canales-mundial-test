@@ -16,6 +16,7 @@ const SELECTORS = {
   splitButton: "#splitButton",
   closeSplitButton: "#closeSplitButton",
   modeToggleButton: "#modeToggleButton",
+  embedSecurityButton: "#embedSecurityButton",
   iframeControlButton: "#iframeControlButton",
   demoButton: "#demoButton",
   presetGroups: "#presetGroups",
@@ -131,6 +132,7 @@ const STREAMX_EVENTS_URL = "/.netlify/functions/streamx-events";
 const STREAMX_CHANNELS_URL = "/.netlify/functions/streamx-channels";
 const THESPORTSDB_EVENTS_URL = "/.netlify/functions/thesportsdb-events";
 const PARTICIPANT_PROFILES_URL = "/.netlify/functions/participant-profiles";
+const IMAGE_PROXY_URL = "/.netlify/functions/image-proxy";
 const STREAMX_CANONICAL_HOST = "streamx-hd.com";
 const STREAMX_CANONICAL_ORIGIN = `https://${STREAMX_CANONICAL_HOST}`;
 const STREAMX_LEGACY_HOSTS = new Set(["stream-xhd.com", "www.stream-xhd.com"]);
@@ -263,6 +265,7 @@ const playerPaneStates = {
 let activePaneId = PLAYER_PANES.PRIMARY;
 let channelSwitcherTargetPaneId = "";
 let tvOverlayLocked = true;
+let embedProtectionEnabled = true;
 let tvHomeFocusInitialized = false;
 let playerHistoryActive = false;
 let ignoreNextPopState = false;
@@ -2864,7 +2867,7 @@ function extractImagePalette(url) {
       window.clearTimeout(timeout);
       resolve([]);
     };
-    image.src = url;
+    image.src = `${IMAGE_PROXY_URL}?url=${encodeURIComponent(url)}`;
   });
 
   imagePaletteCache.set(url, request);
@@ -2971,7 +2974,8 @@ function extractIframeTitle(value) {
 }
 
 function buildIframe(src, title = "Player embed") {
-  return `<iframe src="${escapeAttribute(src)}" title="${escapeAttribute(title)}" width="100%" height="100%" frameborder="0" scrolling="no" allow="${DEFAULT_ALLOW}" sandbox="${EMBED_SANDBOX}" allowfullscreen webkitallowfullscreen></iframe>`;
+  const sandbox = embedProtectionEnabled ? ` sandbox="${EMBED_SANDBOX}"` : "";
+  return `<iframe src="${escapeAttribute(src)}" title="${escapeAttribute(title)}" width="100%" height="100%" frameborder="0" scrolling="no" allow="${DEFAULT_ALLOW}"${sandbox} webkitallowfullscreen></iframe>`;
 }
 
 function normalizeEmbed(value) {
@@ -3002,8 +3006,9 @@ function createEmbedFrame(src, title = "Player embed") {
   frame.frameBorder = "0";
   frame.scrolling = "no";
   frame.allow = DEFAULT_ALLOW;
-  frame.allowFullscreen = true;
-  frame.setAttribute("sandbox", EMBED_SANDBOX);
+  if (embedProtectionEnabled) {
+    frame.setAttribute("sandbox", EMBED_SANDBOX);
+  }
   frame.setAttribute("webkitallowfullscreen", "true");
   frame.setAttribute("allowtransparency", "true");
   frame.setAttribute("playsinline", "true");
@@ -3026,8 +3031,11 @@ function prepareEmbeds(container) {
 
     frame.setAttribute("allow", Array.from(permissions).join("; "));
     frame.setAttribute("title", frame.getAttribute("title") || "Player embed");
-    frame.setAttribute("sandbox", EMBED_SANDBOX);
-    frame.setAttribute("allowfullscreen", "true");
+    if (embedProtectionEnabled) {
+      frame.setAttribute("sandbox", EMBED_SANDBOX);
+    } else {
+      frame.removeAttribute("sandbox");
+    }
     frame.setAttribute("webkitallowfullscreen", "true");
     frame.setAttribute("playsinline", "true");
     frame.setAttribute("referrerpolicy", "no-referrer");
@@ -3761,6 +3769,44 @@ function toggleIframeControl() {
   if (tvOverlayLocked) {
     focusTvOverlay();
   }
+}
+
+function syncEmbedSecurityButton() {
+  const label = embedProtectionEnabled
+    ? "Protección anti-popup activa"
+    : "Modo compatible: los popups pueden abrirse";
+  dom.embedSecurityButton.classList.toggle("is-active", embedProtectionEnabled);
+  dom.embedSecurityButton.classList.toggle("is-unsafe", !embedProtectionEnabled);
+  dom.embedSecurityButton.setAttribute("aria-pressed", String(embedProtectionEnabled));
+  dom.embedSecurityButton.setAttribute("aria-label", label);
+  dom.embedSecurityButton.setAttribute("title", `${label} (S)`);
+}
+
+function reloadPlayerFramesForSecurityMode() {
+  [dom.playerStage, dom.secondaryPlayerStage].forEach((stage) => {
+    const currentFrame = stage.querySelector("iframe");
+    if (!currentFrame) return;
+
+    const replacement = createEmbedFrame(currentFrame.src, currentFrame.title);
+    replacement.className = currentFrame.className;
+    currentFrame.replaceWith(replacement);
+  });
+}
+
+function toggleEmbedProtection() {
+  embedProtectionEnabled = !embedProtectionEnabled;
+  syncEmbedSecurityButton();
+  reloadPlayerFramesForSecurityMode();
+  highlightsKey = "";
+
+  showChannelToast({
+    sourceName: embedProtectionEnabled ? "Protección anti-popup" : "Modo compatible",
+    name: embedProtectionEnabled ? "Sandbox activado" : "Sandbox desactivado",
+    language: embedProtectionEnabled ? "Ventanas bloqueadas" : "El proveedor puede abrir publicidad",
+    quality: embedProtectionEnabled ? "Protegido" : "Precaución",
+    sourceUrl: getCurrentSource(),
+  });
+  revealControls();
 }
 
 async function enterFullscreen() {
@@ -4573,6 +4619,7 @@ function bindEvents() {
     revealControls();
   });
   dom.modeToggleButton.addEventListener("click", togglePlayerMode);
+  dom.embedSecurityButton.addEventListener("click", toggleEmbedProtection);
   dom.iframeControlButton.addEventListener("click", toggleIframeControl);
   dom.closeButton.addEventListener("click", handleBackNavigation);
   dom.channelsButton.addEventListener("click", () => {
@@ -4646,6 +4693,12 @@ function bindEvents() {
       return;
     }
 
+    if (["s", "S"].includes(event.key)) {
+      event.preventDefault();
+      toggleEmbedProtection();
+      return;
+    }
+
     if (["c", "C"].includes(event.key)) {
       event.preventDefault();
       toggleChannelSwitcher(undefined, { focus: isTvMode(), paneId: activePaneId });
@@ -4706,6 +4759,7 @@ function bindEvents() {
 }
 
 setPlayerMode(playerMode, { persist: false });
+syncEmbedSecurityButton();
 renderAgenda();
 renderChannels();
 bindEvents();
