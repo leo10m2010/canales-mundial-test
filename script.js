@@ -1359,9 +1359,10 @@ function buildAgendaEvent(streamEvent, game) {
   const title = source.title || game?.title || makeTitleFromTeams(source) || "Evento";
   const leagueName = source.leagueName || source.league || source.sportName || (game ? "Copa Del Mundo 2026" : "");
   const parsedDate = source.parsedDate || game?.parsedDate || parseStreamxDate(source);
-  const sourceHomeTeam = cleanText(source.homeTeam || game?.homeTeam || "");
-  const sourceAwayTeam = cleanText(source.awayTeam || game?.awayTeam || "");
-  const hasTeams = Boolean(sourceHomeTeam || sourceAwayTeam);
+  const titleTeams = parseTeamsFromTitle(title);
+  const sourceHomeTeam = cleanText(source.homeTeam || game?.homeTeam || titleTeams.homeTeam);
+  const sourceAwayTeam = cleanText(source.awayTeam || game?.awayTeam || titleTeams.awayTeam);
+  const hasTeams = Boolean(sourceHomeTeam && sourceAwayTeam);
   const eventLogo = firstImageUrl(source.eventLogo, source.logo, source.image, source.background);
   const leagueLogo = firstImageUrl(source.leagueLogo, source.sportLogo);
   const secondaryLogo = leagueLogo && leagueLogo !== eventLogo ? leagueLogo : "";
@@ -1378,8 +1379,8 @@ function buildAgendaEvent(streamEvent, game) {
     id: source.id || (game ? `worldcup-${game.id}` : toBase64Id(title)),
     title,
     sportName: source.sportName || (game ? "Mundial" : source.sportName),
-    homeTeam: sourceHomeTeam || title,
-    awayTeam: sourceAwayTeam || leagueName,
+    homeTeam: sourceHomeTeam,
+    awayTeam: sourceAwayTeam,
     homeLogo: source.homeLogo || homeFlagLogo || (!hasTeams ? eventLogo : ""),
     awayLogo: source.awayLogo || awayFlagLogo || (!hasTeams ? secondaryLogo : ""),
     eventLogo,
@@ -1920,6 +1921,7 @@ function updateHighlightsCard(events) {
   if (isLive) {
     const frame = createEmbedFrame(servers[0].sourceUrl, title);
     frame.classList.add("highlights-frame");
+    frame.addEventListener("load", () => thumb.classList.add("is-player-ready"), { once: true });
     thumb.append(frame);
   }
   card.append(thumb);
@@ -2132,15 +2134,9 @@ function createAgendaCard(event, agendaEvents = []) {
     head.append(createElement("span", "match-status live", status.label));
   }
 
-  const row = createElement("div", "match-row");
-  const [homeScore, awayScore] = getAgendaScorePair(event);
-  row.append(
-    createTeamBlock(event.homeTeam || "Local", event.homeLogo, event.hasTeams),
-    createElement("span", "match-score", homeScore),
-    createAgendaCenter(event, status),
-    createElement("span", "match-score", awayScore),
-    createTeamBlock(event.awayTeam || "Visitante", event.awayLogo, event.hasTeams),
-  );
+  const row = event.hasTeams
+    ? createMatchupRow(event, status)
+    : createTitleEventRow(event, status);
 
   const serverList = createElement("div", "server-list");
 
@@ -2161,6 +2157,45 @@ function createAgendaCard(event, agendaEvents = []) {
 
   card.append(head, row, serverList);
   return card;
+}
+
+function createMatchupRow(event, status) {
+  const row = createElement("div", "match-row");
+  const [homeScore, awayScore] = getAgendaScorePair(event);
+  row.append(
+    createTeamBlock(event.homeTeam || "Local", event.homeLogo),
+    createElement("span", "match-score", homeScore),
+    createAgendaCenter(event, status),
+    createElement("span", "match-score", awayScore),
+    createTeamBlock(event.awayTeam || "Visitante", event.awayLogo),
+  );
+  return row;
+}
+
+function createTitleEventRow(event, status) {
+  const row = createElement("div", "title-event-row");
+  const mark = createElement("div", "title-event-mark");
+  const logo = firstImageUrl(event.eventLogo, event.leagueLogo);
+
+  if (logo) {
+    const image = document.createElement("img");
+    image.src = logo;
+    image.alt = "";
+    image.loading = "lazy";
+    image.onerror = () => mark.replaceChildren(createSportIcon(getAgendaSportIcon(getAgendaSportKey(event))));
+    mark.append(image);
+  } else {
+    mark.append(createSportIcon(getAgendaSportIcon(getAgendaSportKey(event))));
+  }
+
+  const copy = createElement("div", "title-event-copy");
+  copy.append(createElement("h3", "title-event-name", event.title || "Evento"));
+  if (event.note) {
+    copy.append(createElement("p", "title-event-note", cleanText(event.note)));
+  }
+
+  row.append(mark, copy, createAgendaCenter(event, status));
+  return row;
 }
 
 function getAgendaStatus(event) {
@@ -2535,9 +2570,19 @@ function makeTitleFromTeams(event) {
   return event.homeTeam && event.awayTeam ? `${event.homeTeam} vs ${event.awayTeam}` : "";
 }
 
+function parseTeamsFromTitle(value) {
+  const parts = cleanText(value).split(/\s+v(?:s\.?)?\s+/i);
+
+  if (parts.length !== 2 || !parts[0] || !parts[1]) {
+    return { homeTeam: "", awayTeam: "" };
+  }
+
+  return { homeTeam: cleanText(parts[0]), awayTeam: cleanText(parts[1]) };
+}
+
 function formatCompactMatchTitle(event) {
-  const home = cleanText(event.homeTeam || "Local");
-  const away = cleanText(event.awayTeam || "Visitante");
+  const home = cleanText(event.homeTeam || "");
+  const away = cleanText(event.awayTeam || "");
   return home && away ? `${home} vs ${away}` : cleanText(event.title || "otro evento");
 }
 

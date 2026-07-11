@@ -867,6 +867,12 @@ h1 {
   width: 100%;
   height: 100%;
   border: 0;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+
+.highlights-thumb.is-player-ready .highlights-frame {
+  opacity: 1;
 }
 
 .highlights-thumb::after {
@@ -1439,6 +1445,56 @@ kbd {
   grid-template-columns: minmax(0, 1fr) auto minmax(64px, auto) auto minmax(0, 1fr);
   gap: 10px;
   align-items: center;
+}
+
+.title-event-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  min-height: 74px;
+}
+
+.title-event-mark {
+  display: grid;
+  width: 58px;
+  height: 58px;
+  place-items: center;
+  overflow: hidden;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+}
+
+.title-event-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 7px;
+}
+
+.title-event-mark .sport-icon {
+  width: 32px;
+  height: 32px;
+}
+
+.title-event-copy {
+  min-width: 0;
+}
+
+.title-event-name {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1rem;
+  line-height: 1.25;
+}
+
+.title-event-note {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.35;
 }
 
 .team-block {
@@ -2863,6 +2919,15 @@ body.is-tv-mode .watch-button {
   }
 
   .team-mark {
+    width: 46px;
+    height: 46px;
+  }
+
+  .title-event-row {
+    gap: 10px;
+  }
+
+  .title-event-mark {
     width: 46px;
     height: 46px;
   }
