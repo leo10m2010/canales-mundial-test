@@ -719,7 +719,9 @@ public class PlayerActivity extends Activity {
 
     private TextView createSourceRow(int index) {
         boolean active = index == currentSourceIndex;
-        TextView row = label((index + 1) + ". " + getSourceName(index), 16, active ? TvStyle.BG : TvStyle.TEXT, true);
+        String activeLabel = active ? " · EN USO" : "";
+        TextView row = label("Fuente " + (index + 1) + " de " + sourceUrls.size() + " · " + getSourceName(index) + activeLabel,
+                16, active ? TvStyle.BG : TvStyle.TEXT, true);
         row.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
         row.setFocusable(true);
         row.setClickable(true);
@@ -983,11 +985,15 @@ public class PlayerActivity extends Activity {
                 "    var nodes = document.querySelectorAll('video, audio');" +
                 "    for(var i=0; i < nodes.length; i++) {" +
                 "      var v = nodes[i];" +
-                "      v.muted = false;" +
+                "      var wasPaused = v.paused;" +
+                "      if(wasPaused) v.muted = true;" +
                 "      v.setAttribute('autoplay', 'true');" +
                 "      v.setAttribute('playsinline', 'true');" +
                 "      if(v.volume === 0) v.volume = 1;" +
-                "      if(v.paused) v.play().catch(function(e){});" +
+                "      if(wasPaused) v.play().then(function(){" +
+                "        setTimeout(function(){ v.muted = false; v.volume = 1; }, 800);" +
+                "      }).catch(function(){});" +
+                "      else { v.muted = false; v.volume = 1; }" +
                 "      /* Bloquear pausas accidentales por 5s */" +
                 "      if(!v._hooked) {" +
                 "        var originalPause = v.pause;" +
@@ -998,7 +1004,7 @@ public class PlayerActivity extends Activity {
                 "    /* Buscar y remover overlays de play que bloquean el click */" +
                 "    var overlays = document.querySelectorAll('[class*=\"overlay\"], [class*=\"poster\"], [class*=\"big-play\"]');" +
                 "    for(var k=0; k < overlays.length; k++) {" +
-                "       if(overlays[k].innerText.toLowerCase().contains('play') || overlays[k].className.contains('play')) overlays[k].style.display='none';" +
+                "       if((overlays[k].innerText || '').toLowerCase().includes('play') || String(overlays[k].className).includes('play')) overlays[k].style.display='none';" +
                 "    }" +
                 "    var playButtons = document.querySelectorAll('button, [class*=\"play\"], [id*=\"play\"], .vjs-big-play-button');" +
                 "    for(var j=0; j < playButtons.length; j++) {" +
@@ -1080,6 +1086,11 @@ public class PlayerActivity extends Activity {
 
         if (keyCode == KeyEvent.KEYCODE_MENU) {
             toggleSourcePanel();
+            return true;
+        }
+
+        if (keyCode == KeyEvent.KEYCODE_R) {
+            loadCurrentSource();
             return true;
         }
 

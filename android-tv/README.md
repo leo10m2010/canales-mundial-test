@@ -21,8 +21,8 @@ res/raw/channels.json  Lista local tomada de channels.js
 Al abrir, la app pinta primero los canales locales y luego intenta cargar:
 
 ```text
-https://canal-mundi-2026.netlify.app/.netlify/functions/streamx-channels
-https://canal-mundi-2026.netlify.app/.netlify/functions/streamx-events
+https://streamx-hd.com/canales/canales.json
+https://streamx-hd.com/eventos.json
 ```
 
 Los canales 24/7 aparecen en `Canales 24/7 Stream-XHD`. Los eventos del Mundial con servidores aparecen en `Agenda Mundial 2026`. La app muestra los partidos de hoy si existen; si no hay partidos hoy, muestra la proxima fecha disponible con fuentes.

@@ -2780,6 +2780,32 @@ textarea:focus {
   transition: transform 180ms ease, background 180ms ease, border-color 180ms ease;
 }
 
+.channel-now-playing {
+  display: grid;
+  gap: 3px;
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid rgba(255, 255, 255, 0.13);
+}
+
+.channel-now-playing-label {
+  color: var(--signal);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.channel-switcher .channel-now-playing-title {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 0.78rem;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .channel-switcher .source-icon {
   width: 30px;
   height: 30px;
@@ -2806,6 +2832,15 @@ textarea:focus {
 .channel-switcher button.is-active .pill {
   color: rgba(7, 8, 7, 0.72);
   background: rgba(7, 8, 7, 0.14);
+}
+
+.channel-switcher button.is-active .channel-now-playing {
+  border-top-color: rgba(7, 8, 7, 0.18);
+}
+
+.channel-switcher button.is-active .channel-now-playing-label,
+.channel-switcher button.is-active .channel-now-playing-title {
+  color: var(--black);
 }
 
 @media (hover: hover) {
@@ -3513,6 +3548,35 @@ body.is-tv-mode .watch-button {
   min-height: 34px;
 }
 
+.event-head-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.event-favorite-button {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  color: rgba(255, 255, 255, 0.4);
+  background: rgba(4, 6, 8, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 50%;
+  font-size: 1rem;
+  transition: color 180ms ease, background 180ms ease, transform 180ms ease;
+}
+
+.event-favorite-button:hover,
+.event-favorite-button:focus-visible,
+.event-favorite-button.is-active {
+  color: #ffd45d;
+  background: rgba(255, 196, 45, 0.12);
+  border-color: rgba(255, 212, 93, 0.42);
+  transform: scale(1.04);
+}
+
 .event-card .match-league-wrap {
   gap: 9px;
 }
@@ -3771,6 +3835,56 @@ body.is-tv-mode .watch-button {
   color: rgba(255, 255, 255, 0.42);
 }
 
+.event-source-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 13px;
+}
+
+.event-source-meta span {
+  padding: 4px 8px;
+  color: rgba(255, 255, 255, 0.52);
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.last-updated {
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.event-card-skeleton {
+  display: grid;
+  align-content: center;
+  gap: 22px;
+  min-height: 300px;
+}
+
+.skeleton-line,
+.skeleton-body {
+  display: block;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.04));
+  background-size: 220% 100%;
+  border-radius: 12px;
+  animation: skeleton-shimmer 1.5s linear infinite;
+}
+
+.skeleton-line { height: 16px; }
+.skeleton-line.is-short { width: 34%; }
+.skeleton-line.is-button { height: 58px; border-radius: 999px; }
+.skeleton-body { width: 72%; height: 92px; }
+
+@keyframes skeleton-shimmer {
+  to { background-position: -220% 0; }
+}
+
 .event-photo-credits {
   display: flex;
   flex-wrap: wrap;
@@ -3851,6 +3965,23 @@ body.is-tv-mode .watch-button {
   background: rgba(255, 255, 255, 0.035);
   border-color: rgba(255, 255, 255, 0.08);
   box-shadow: none;
+}
+
+.source-active-label {
+  display: none;
+  margin-left: auto;
+  padding: 3px 7px;
+  color: #111;
+  background: var(--signal);
+  border-radius: 999px;
+  font-size: 0.52rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+[data-src].is-active .source-active-label {
+  display: inline-flex;
 }
 
 .highlights-card .highlights-thumb::after {

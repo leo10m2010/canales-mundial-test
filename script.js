@@ -13,6 +13,7 @@ const SELECTORS = {
   closeButton: "#closeButton",
   fullscreenButton: "#fullscreenButton",
   channelsButton: "#channelsButton",
+  retrySourceButton: "#retrySourceButton",
   splitButton: "#splitButton",
   closeSplitButton: "#closeSplitButton",
   modeToggleButton: "#modeToggleButton",
@@ -38,6 +39,7 @@ const SELECTORS = {
   agendaDateShell: "#agendaDateShell",
   agendaDateTabs: "#agendaDateTabs",
   agendaCount: "#agendaCount",
+  lastUpdated: "#lastUpdated",
   refreshStreamxButton: "#refreshStreamxButton",
   tvOverlay: "#tvOverlay",
 };
@@ -63,6 +65,7 @@ const AGENDA_VIEWS = {
   results: { label: "Resultados", title: "Resultados", subtitle: "Marcadores finales" },
   upcoming: { label: "Próximos", title: "Próximos", subtitle: "Siguientes partidos" },
   all: { label: "Todos", title: "World Cup", subtitle: "Partidos y resultados" },
+  favorites: { label: "Favoritos", title: "Favoritos", subtitle: "Tus eventos guardados" },
 };
 const DEFAULT_AGENDA_SPORTS = [
   { key: "soccer", label: "Futbol" },
@@ -258,6 +261,8 @@ let selectedAgendaDate = "";
 let agendaDateManuallySelected = false;
 let selectedAgendaSport = "all";
 let selectedAgendaView = "all";
+let favoriteEventKeys = loadFavoriteEventKeys();
+let countdownRefreshTimer = 0;
 let lastWorldcupLoadedAt = 0;
 let lastStreamxLoadedAt = 0;
 let lastChannelsLoadedAt = 0;
@@ -371,6 +376,15 @@ function safeStorageSet(key, value) {
     window.localStorage.setItem(key, value);
   } catch (error) {
     // Storage can be blocked in some embedded TV browsers.
+  }
+}
+
+function loadFavoriteEventKeys() {
+  try {
+    const values = JSON.parse(safeStorageGet("favoriteEvents") || "[]");
+    return new Set(Array.isArray(values) ? values : []);
+  } catch (error) {
+    return new Set();
   }
 }
 
@@ -648,6 +662,7 @@ async function loadStreamxSchedule(options = {}) {
     changed = getCollectionSignature(nextEvents) !== getCollectionSignature(streamxEvents);
     streamxEvents = nextEvents;
     lastStreamxLoadedAt = Date.now();
+    updateLastUpdatedLabel();
   } catch (error) {
     streamxError = streamxEvents.length
       ? "No se pudo actualizar la agenda StreamX-HD. Se mantiene el ultimo dato disponible."
@@ -1976,8 +1991,21 @@ function filterAgendaByView(events, view) {
     if (view === "today") return dateKey === todayKey;
     if (view === "results") return status === "finished";
     if (view === "upcoming") return status === "upcoming" || status === "live";
+    if (view === "favorites") return favoriteEventKeys.has(getFavoriteEventKey(event));
     return true;
   });
+}
+
+function getFavoriteEventKey(event) {
+  return String(event.id || toBase64Id(`${event.title}|${event.time || event.parsedDate?.toISOString?.() || ""}`));
+}
+
+function toggleFavoriteEvent(event) {
+  const key = getFavoriteEventKey(event);
+  if (favoriteEventKeys.has(key)) favoriteEventKeys.delete(key);
+  else favoriteEventKeys.add(key);
+  safeStorageSet("favoriteEvents", JSON.stringify(Array.from(favoriteEventKeys)));
+  renderAgenda();
 }
 
 function setAgendaView(view) {
@@ -2326,6 +2354,7 @@ function renderAgenda() {
 
   if ((streamxLoading || worldcupLoading) && !sourceAgendaEvents.length) {
     setAgendaStatus("Cargando eventos…", false, true);
+    renderAgendaSkeletons();
     return;
   }
 
@@ -2369,6 +2398,20 @@ function setAgendaStatus(message, isError, isProminent) {
   dom.agendaStatus.hidden = !message;
   dom.agendaStatus.classList.toggle("is-error", isError);
   dom.agendaStatus.classList.toggle("is-prominent", isProminent);
+}
+
+function renderAgendaSkeletons() {
+  if (dom.agendaGrid.childElementCount) return;
+  for (let index = 0; index < 4; index += 1) {
+    const skeleton = createElement("article", "event-card event-card-skeleton");
+    skeleton.setAttribute("aria-hidden", "true");
+    skeleton.append(
+      createElement("span", "skeleton-line is-short", ""),
+      createElement("div", "skeleton-body", ""),
+      createElement("span", "skeleton-line is-button", ""),
+    );
+    dom.agendaGrid.append(skeleton);
+  }
 }
 
 function hasPlayableServers(event) {
@@ -2416,7 +2459,16 @@ function createAgendaCard(event, agendaEvents = []) {
   }
   leagueWrap.append(createElement("span", "match-league", leagueText || "Evento"));
   head.append(leagueWrap);
-  head.append(createElement("span", `match-status ${status.key}`, status.label));
+  const headActions = createElement("div", "event-head-actions");
+  const favoriteButton = createElement("button", "event-favorite-button", "★");
+  const isFavorite = favoriteEventKeys.has(getFavoriteEventKey(event));
+  favoriteButton.type = "button";
+  favoriteButton.classList.toggle("is-active", isFavorite);
+  favoriteButton.setAttribute("aria-label", isFavorite ? "Quitar de favoritos" : "Agregar a favoritos");
+  favoriteButton.setAttribute("aria-pressed", String(isFavorite));
+  favoriteButton.addEventListener("click", () => toggleFavoriteEvent(event));
+  headActions.append(favoriteButton, createElement("span", `match-status ${status.key}`, status.label));
+  head.append(headActions);
 
   const body = createElement("div", "event-card-body");
   const summary = createEventSummary(event, status);
@@ -2494,11 +2546,26 @@ function createEventSummary(event, status) {
 
   const timing = createElement("div", `event-timing is-${status.key}`);
   timing.append(createElement("span", "event-timing-dot", ""));
-  const timingText = status.key === "live"
-    ? "Ahora en juego"
-    : (status.key === "finished" ? "Evento finalizado" : `${formatAgendaTime(event)} · ${formatAgendaDayShort(event)}`);
-  timing.append(createElement("span", "", timingText));
+  const timingText = createElement("span", "event-timing-text", getEventTimingText(event, status));
+  const eventDate = event.parsedDate || event.worldcupGame?.parsedDate;
+  if (eventDate) timingText.dataset.eventStart = String(eventDate.getTime());
+  timingText.dataset.eventDuration = String(Number(event.duration || 130) + Number(event.extraTime || 0));
+  timingText.dataset.eventStatus = status.key;
+  timing.append(timingText);
   summary.append(timing);
+
+  const servers = event.serverItems || getEventServerItems(event);
+  if (servers.length) {
+    const sourceMeta = createElement("div", "event-source-meta");
+    const languages = Array.from(new Set(servers.map((server) => server.language).filter(Boolean)));
+    const qualities = Array.from(new Set(servers.map((server) => server.quality).filter(Boolean)));
+    sourceMeta.append(
+      createElement("span", "", `${servers.length} fuente${servers.length === 1 ? "" : "s"}`),
+      createElement("span", "", languages.join(" / ") || "Idioma variable"),
+      createElement("span", "", qualities.join(" / ") || "Calidad variable"),
+    );
+    summary.append(sourceMeta);
+  }
 
   const credits = [event.homeProfile, event.awayProfile].filter((profile, index, profiles) => (
     profile?.source && profile?.sourceUrl && profiles.findIndex((item) => item?.sourceUrl === profile.sourceUrl) === index
@@ -2516,6 +2583,42 @@ function createEventSummary(event, status) {
   }
 
   return summary;
+}
+
+function getEventTimingText(event, status = event.statusInfo || getAgendaStatus(event)) {
+  if (status.key === "live") return "Ahora en juego";
+  if (status.key === "finished") return "Evento finalizado";
+  const date = event.parsedDate || event.worldcupGame?.parsedDate;
+  if (!date) return "Horario por confirmar";
+  const remaining = date.getTime() - Date.now();
+  if (remaining > 0 && remaining <= 24 * 60 * 60 * 1000) {
+    const minutes = Math.max(1, Math.ceil(remaining / 60000));
+    const hours = Math.floor(minutes / 60);
+    const rest = minutes % 60;
+    return hours ? `Comienza en ${hours} h${rest ? ` ${rest} min` : ""}` : `Comienza en ${minutes} min`;
+  }
+  return `${formatAgendaTime(event)} · ${formatAgendaDayShort(event)}`;
+}
+
+function updateCountdownLabels() {
+  document.querySelectorAll(".event-timing-text[data-event-start]").forEach((label) => {
+    const date = new Date(Number(label.dataset.eventStart));
+    const pseudoEvent = { parsedDate: date, duration: Number(label.dataset.eventDuration || 130) };
+    const status = getStreamxStatus(pseudoEvent);
+    label.textContent = getEventTimingText(pseudoEvent, status);
+    const timing = label.closest(".event-timing");
+    if (timing) {
+      timing.classList.remove("is-live", "is-upcoming", "is-finished");
+      timing.classList.add(`is-${status.key}`);
+    }
+  });
+  updateLastUpdatedLabel();
+}
+
+function updateLastUpdatedLabel() {
+  if (!lastStreamxLoadedAt) return;
+  const seconds = Math.max(0, Math.floor((Date.now() - lastStreamxLoadedAt) / 1000));
+  dom.lastUpdated.textContent = seconds < 10 ? "Actualizado ahora" : `Actualizado hace ${seconds < 60 ? `${seconds} s` : `${Math.floor(seconds / 60)} min`}`;
 }
 
 function createEventVisual(event) {
@@ -3507,14 +3610,34 @@ function createSourceIcon(item) {
   return icon;
 }
 
-function createChannelButton(item, playlist = null, playlistTitle = "") {
+function getLiveEventForChannel(item) {
+  if (item.category === STREAMX_EVENT_CATEGORY) {
+    return null;
+  }
+
+  const sourceUrl = canonicalizeStreamxUrl(item.sourceUrl);
+  const streamCode = extractStreamCode(sourceUrl);
+
+  return streamxEvents.find((event) => {
+    if (getStreamxStatus(event).key !== "live") {
+      return false;
+    }
+
+    return normalizeStreamxEventServers(event).some((server) => {
+      const serverCode = extractStreamCode(server.url);
+      return server.url === sourceUrl || Boolean(streamCode && serverCode === streamCode);
+    });
+  }) || null;
+}
+
+function createChannelButton(item, playlist = null, playlistTitle = "", showLiveEvent = false) {
   const button = document.createElement("button");
   button.type = "button";
   button.dataset.src = item.sourceUrl;
   button.dataset.sourceKey = getItemKey(item);
 
   const top = createElement("div", "channel-card-top");
-  top.append(createSourceIcon(item), createFlag(item), createElement("strong", "", item.sourceName));
+  top.append(createSourceIcon(item), createFlag(item), createElement("strong", "", item.sourceName), createElement("span", "source-active-label", "En uso"));
 
   const meta = createElement("div", "meta-row");
   [item.language, item.quality, item.type].forEach((label) => {
@@ -3526,6 +3649,17 @@ function createChannelButton(item, playlist = null, playlistTitle = "") {
   }
 
   button.append(top, meta);
+
+  const liveEvent = showLiveEvent ? getLiveEventForChannel(item) : null;
+  if (liveEvent) {
+    const nowPlaying = createElement("div", "channel-now-playing");
+    nowPlaying.append(
+      createElement("span", "channel-now-playing-label", "Transmitiendo ahora"),
+      createElement("strong", "channel-now-playing-title", liveEvent.title || "Evento en vivo")
+    );
+    button.append(nowPlaying);
+  }
+
   button.addEventListener("click", () => openItem(item, {
     playlist: playlist || getPlayableItems(),
     playlistTitle: playlistTitle || "Biblioteca en vivo",
@@ -3541,7 +3675,7 @@ function createItemsSection(title, items, compact = false, modifier = "", playli
   section.append(createElement(compact ? "span" : "h2", compact ? "switcher-label" : "", title));
 
   const list = compact ? section : createElement("div", "preset-grid");
-  items.forEach((item) => list.append(createChannelButton(item, playlist, title)));
+  items.forEach((item) => list.append(createChannelButton(item, playlist, title, compact)));
 
   if (!compact) {
     section.append(list);
@@ -3682,8 +3816,9 @@ function renderChannelSwitcher() {
   const worldCupItems = getVisibleItems(getWorldCupItems());
   const streamxItems = getVisibleItems(getStreamxChannelItems());
   const regularItems = getVisibleItems(getRegularItems());
+  const currentSourceIndex = paneState.playlist.findIndex((item) => getItemKey(item) === paneState.sourceKey);
   const headerSubtitle = paneState.playlist.length
-    ? `${paneState.playlist.length} canales del evento · ${getPaneLabel(paneId)}`
+    ? `${currentSourceIndex >= 0 ? `Fuente ${currentSourceIndex + 1} de ` : ""}${paneState.playlist.length} · ${getPaneLabel(paneId)}`
     : `${visibleItems.length} fuentes visibles`;
 
   dom.channelSwitcher.replaceChildren();
@@ -3691,7 +3826,7 @@ function renderChannelSwitcher() {
   const switcherHeader = createElement("div", "switcher-header");
   const switcherTitle = createElement("div");
   switcherTitle.append(
-    createElement("strong", "", channelSwitcherTargetPaneId ? `Elegir ${getPaneLabel(paneId)}` : paneState.playlist.length ? `Canales disponibles · ${getPaneLabel(paneId)}` : `Canales · ${getPaneLabel(paneId)}`),
+    createElement("strong", "", channelSwitcherTargetPaneId ? `Elegir ${getPaneLabel(paneId)}` : paneState.playlist.length ? `Servidores del evento · ${getPaneLabel(paneId)}` : `Canales · ${getPaneLabel(paneId)}`),
     createElement("span", "", headerSubtitle)
   );
   switcherHeader.append(switcherTitle);
@@ -3842,6 +3977,19 @@ function openItemByOffset(offset, paneId = activePaneId) {
   const safeIndex = currentIndex === -1 ? (offset > 0 ? -1 : 0) : currentIndex;
   const nextIndex = (safeIndex + offset + items.length) % items.length;
   openItem(items[nextIndex], { paneId, keepFullscreen: true, keepSplit: true, announce: true, playlist: items, keepPlaylist: true });
+}
+
+function retryCurrentSource(paneId = activePaneId) {
+  const paneState = getPaneState(paneId);
+  if (!paneState.item?.sourceUrl) return;
+  showChannelToast({ ...paneState.item, sourceName: `Reintentando ${paneState.item.sourceName}` }, paneId);
+  openItem(paneState.item, {
+    paneId,
+    keepPlaylist: true,
+    keepSplit: true,
+    keepFullscreen: true,
+    silentToast: true,
+  });
 }
 
 function canRunSourceNavigation(event) {
@@ -4661,6 +4809,7 @@ function startAutoRefresh() {
   window.clearTimeout(scoreRefreshTimer);
   window.clearInterval(streamxRefreshTimer);
   window.clearInterval(channelsRefreshTimer);
+  window.clearInterval(countdownRefreshTimer);
 
   scheduleWorldcupRefresh();
 
@@ -4675,6 +4824,8 @@ function startAutoRefresh() {
       loadStreamxChannels();
     }
   }, CHANNELS_REFRESH_INTERVAL);
+
+  countdownRefreshTimer = window.setInterval(updateCountdownLabels, 30000);
 
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) {
@@ -4748,6 +4899,7 @@ function bindEvents() {
   });
 
   dom.fullscreenButton.addEventListener("click", toggleFullscreen);
+  dom.retrySourceButton.addEventListener("click", () => retryCurrentSource());
   dom.splitButton.addEventListener("click", () => {
     toggleActivePane();
     revealControls();
@@ -4834,6 +4986,12 @@ function bindEvents() {
     if (["s", "S"].includes(event.key)) {
       event.preventDefault();
       toggleEmbedProtection();
+      return;
+    }
+
+    if (["r", "R"].includes(event.key)) {
+      event.preventDefault();
+      retryCurrentSource();
       return;
     }
 

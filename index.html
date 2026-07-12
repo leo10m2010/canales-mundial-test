@@ -34,6 +34,10 @@
               <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /></svg>
               <span>Todos</span>
             </button>
+            <button class="top-tab" type="button" data-agenda-view="favorites">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-2.9-5.6 2.9 1.1-6.2L3 9.6l6.2-.9L12 3Z" /></svg>
+              <span>Favoritos</span>
+            </button>
           </nav>
           <span class="top-nav-spacer" aria-hidden="true"></span>
         </div>
@@ -59,6 +63,7 @@
             </div>
             <div class="library-tools">
               <button class="refresh-button" type="button" id="refreshStreamxButton">Actualizar agenda</button>
+              <span class="last-updated" id="lastUpdated">Actualizando...</span>
               <span class="count-badge" id="agendaCount">0 eventos</span>
             </div>
           </div>
@@ -201,6 +206,10 @@
             <rect x="2" y="7" width="20" height="15" rx="2" /><polyline points="17 2 12 7 7 2" />
           </svg>
           <span class="sr-only">Modo TV</span>
+        </button>
+        <button class="icon-button" type="button" id="retrySourceButton" aria-label="Reintentar fuente" title="Reintentar fuente (R)">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6v5h-5M4 18v-5h5M18.4 9A7 7 0 0 0 6.2 6.2L4 9m16 6-2.2 2.8A7 7 0 0 1 5.6 15" /></svg>
+          <span class="sr-only">Reintentar fuente</span>
         </button>
         <button class="icon-button is-unsafe" type="button" id="embedSecurityButton" aria-label="Modo compatible: los popups pueden abrirse" aria-pressed="false" title="Modo compatible: los popups pueden abrirse (S)">
           <svg viewBox="0 0 24 24" aria-hidden="true">

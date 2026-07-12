@@ -16,6 +16,19 @@ public class Channel {
     public String liveTime;
     public boolean isLive;
 
+    // Optional match/agenda metadata (Apple-TV parity): populated for events.
+    public String homeTeam;
+    public String awayTeam;
+    public String homeFlagUrl;   // raster (png) flag for BitmapFactory
+    public String awayFlagUrl;
+    public String leagueName;
+    public String leagueBadgeUrl;
+    public String thumbUrl;
+    public String dateKey;       // yyyy-MM-dd
+    public long startEpochMs;
+    public String statusKey;     // "live" | "upcoming" | "finished"
+    public boolean isWorldCup;
+
     public Channel(String name, String category, String language, String country, String quality, String type, List<ChannelSource> sources) {
         this(name, category, language, country, quality, type, "", sources);
     }

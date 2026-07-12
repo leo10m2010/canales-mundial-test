@@ -20,8 +20,9 @@ import java.util.Locale;
 import java.util.TimeZone;
 
 public class ChannelRepository {
-    private static final String STREAMX_CHANNELS_URL = "https://canal-mundi-2026.netlify.app/.netlify/functions/streamx-channels";
-    private static final String STREAMX_EVENTS_URL = "https://canal-mundi-2026.netlify.app/.netlify/functions/streamx-events";
+    private static final String STREAMX_CHANNELS_URL = "https://streamx-hd.com/canales/canales.json";
+    private static final String STREAMX_EVENTS_URL = "https://streamx-hd.com/eventos.json";
+    private static final String THESPORTSDB_EVENTS_URL = "https://www.thesportsdb.com/api/v1/json/123/eventsday.php";
     private static final String CACHE_STREAMX_CHANNELS = "streamx_channels_json";
     private static final String CACHE_STREAMX_EVENTS = "streamx_events_json";
     private static final TimeZone AGENDA_TIME_ZONE = TimeZone.getTimeZone("America/Lima");
@@ -53,12 +54,16 @@ public class ChannelRepository {
         final List<ChannelSource> sources;
         final Date date;
         final String dateKey;
+        final String sportName;
+        final String leagueName;
 
-        EventCandidate(JSONObject event, List<ChannelSource> sources, Date date, String dateKey) {
+        EventCandidate(JSONObject event, List<ChannelSource> sources, Date date, String dateKey, String sportName, String leagueName) {
             this.event = event;
             this.sources = sources;
             this.date = date;
             this.dateKey = dateKey;
+            this.sportName = sportName;
+            this.leagueName = leagueName;
         }
     }
 
@@ -112,8 +117,12 @@ public class ChannelRepository {
 
         try {
             String body = fetchText(STREAMX_CHANNELS_URL);
+            List<Channel> parsed = parseStreamxChannels(body);
+            if (parsed.isEmpty()) {
+                throw new IllegalStateException("Respuesta de canales vacia o invalida");
+            }
             cacheStore.putString(CACHE_STREAMX_CHANNELS, body);
-            channels.addAll(parseStreamxChannels(body));
+            channels.addAll(parsed);
         } catch (Exception error) {
             complete = false;
             usedCache = true;
@@ -123,8 +132,12 @@ public class ChannelRepository {
 
         try {
             String body = fetchText(STREAMX_EVENTS_URL);
+            List<Channel> parsed = parseStreamxEvents(body, true);
+            if (parsed.isEmpty()) {
+                throw new IllegalStateException("Respuesta de agenda vacia o invalida");
+            }
             cacheStore.putString(CACHE_STREAMX_EVENTS, body);
-            channels.addAll(parseStreamxEvents(body));
+            channels.addAll(parsed);
         } catch (Exception error) {
             complete = false;
             usedCache = true;
@@ -143,10 +156,16 @@ public class ChannelRepository {
         List<Channel> channels = new ArrayList<>();
 
         try {
-            JSONObject root = new JSONObject(body);
-            JSONArray array = root.optJSONArray("channels");
-            if (array == null) {
-                array = root.optJSONArray("canales");
+            String trimmed = body == null ? "" : body.trim();
+            JSONArray array;
+            if (trimmed.startsWith("[")) {
+                array = new JSONArray(trimmed);
+            } else {
+                JSONObject root = new JSONObject(trimmed);
+                array = root.optJSONArray("channels");
+                if (array == null) {
+                    array = root.optJSONArray("canales");
+                }
             }
             if (array == null) {
                 return channels;
@@ -185,7 +204,7 @@ public class ChannelRepository {
         return channels;
     }
 
-    private List<Channel> parseStreamxEvents(String body) {
+    private List<Channel> parseStreamxEvents(String body, boolean enrich) {
         List<Channel> channels = new ArrayList<>();
         List<EventCandidate> candidates = new ArrayList<>();
 
@@ -201,6 +220,7 @@ public class ChannelRepository {
                 if (sport == null) {
                     continue;
                 }
+                String sportName = sport.optString("name");
                 JSONArray leagues = sport.optJSONArray("leagues");
                 if (leagues == null) {
                     continue;
@@ -211,6 +231,7 @@ public class ChannelRepository {
                     if (league == null) {
                         continue;
                     }
+                    String leagueName = league.optString("name");
                     JSONArray events = league.optJSONArray("events");
                     if (events == null) {
                         continue;
@@ -218,7 +239,7 @@ public class ChannelRepository {
 
                     for (int eventIndex = 0; eventIndex < events.length(); eventIndex++) {
                         JSONObject event = events.optJSONObject(eventIndex);
-                        if (event == null || !isWorldCupEvent(event, league)) {
+                        if (event == null) {
                             continue;
                         }
 
@@ -232,7 +253,7 @@ public class ChannelRepository {
                             continue;
                         }
 
-                        candidates.add(new EventCandidate(event, sources, eventDate, agendaDateKey(eventDate)));
+                        candidates.add(new EventCandidate(event, sources, eventDate, agendaDateKey(eventDate), sportName, leagueName));
                     }
                 }
             }
@@ -248,7 +269,7 @@ public class ChannelRepository {
                     continue;
                 }
 
-                String title = firstNonEmpty(candidate.event.optString("title"), makeTitleFromTeams(candidate.event), "Partido Mundial");
+                String title = firstNonEmpty(makeTitleFromTeams(candidate.event), candidate.event.optString("title"), "Evento");
                 String quality = candidate.sources.size() == 1 ? "1 fuente" : candidate.sources.size() + " fuentes";
                 String badge = eventBadge(candidate.event);
 
@@ -262,15 +283,37 @@ public class ChannelRepository {
                         badge,
                         candidate.sources
                 );
+                channel.leagueName = firstNonEmpty(candidate.leagueName, candidate.sportName);
+                channel.homeTeam = candidate.event.optString("homeTeam");
+                channel.awayTeam = candidate.event.optString("awayTeam");
+                // StreamX already resolves real team logos (TheSportsDB/ESPN/Wikimedia) per event.
+                channel.homeFlagUrl = firstNonEmpty(candidate.event.optString("homeLogo"), flagCdnUrl(channel.homeTeam));
+                channel.awayFlagUrl = firstNonEmpty(candidate.event.optString("awayLogo"), flagCdnUrl(channel.awayTeam));
+                channel.thumbUrl = firstNonEmpty(candidate.event.optString("background"), candidate.event.optString("image"), candidate.event.optString("logo"), candidate.event.optString("channelLogo"));
+                channel.dateKey = candidate.dateKey;
+                channel.startEpochMs = candidate.date.getTime();
+                channel.isWorldCup = isWorldCupEvent(candidate.event, candidate.event);
 
                 // Parseo de marcador en vivo
                 String status = normalizeText(candidate.event.optString("status"));
+                long now = System.currentTimeMillis();
+                long durationMs = Math.max(1, candidate.event.optLong("duration", 120)) * 60_000L;
                 if (status.contains("live") || status.contains("vivo") || status.contains("jugando")) {
                     channel.isLive = true;
+                    channel.statusKey = "live";
                     channel.liveTime = candidate.event.optString("liveTime", "");
                     String homeScore = candidate.event.optString("homeScore", "0");
                     String awayScore = candidate.event.optString("awayScore", "0");
                     channel.liveScore = homeScore + " - " + awayScore;
+                } else if (status.contains("finish") || status.contains("final") || status.contains("termin")
+                        || status.contains("ended") || status.contains("resultado")
+                        || now > channel.startEpochMs + durationMs) {
+                    channel.statusKey = "finished";
+                } else if (now >= channel.startEpochMs) {
+                    channel.isLive = true;
+                    channel.statusKey = "live";
+                } else {
+                    channel.statusKey = "upcoming";
                 }
 
                 channels.add(channel);
@@ -282,13 +325,122 @@ public class ChannelRepository {
         return channels;
     }
 
+    // Query TheSportsDB directly, once per sport present (its free eventsday needs an
+    // &s=<sport> param to return that sport), then fuzzy-match by team names because
+    // StreamX uses short names ("New York") while TheSportsDB uses full ones ("New York Liberty").
+    private void enrichEventsWithSportsDb(List<Channel> events, String dateKey, java.util.Set<String> sports) {
+        if (events.isEmpty() || dateKey == null || dateKey.isEmpty() || sports.isEmpty()) {
+            return;
+        }
+
+        try {
+            List<JSONObject> sdbEvents = new ArrayList<>();
+            for (String sport : sports) {
+                try {
+                    String url = THESPORTSDB_EVENTS_URL + "?d=" + dateKey + "&s=" + java.net.URLEncoder.encode(sport, "UTF-8");
+                    JSONArray array = new JSONObject(fetchText(url)).optJSONArray("events");
+                    if (array != null) {
+                        for (int index = 0; index < array.length(); index++) {
+                            JSONObject event = array.optJSONObject(index);
+                            if (event != null) {
+                                sdbEvents.add(event);
+                            }
+                        }
+                    }
+                } catch (Exception ignored) {
+                    // Skip this sport; keep the rest.
+                }
+            }
+            if (sdbEvents.isEmpty()) {
+                return;
+            }
+
+            for (Channel channel : events) {
+                JSONObject match = findSportsDbMatch(sdbEvents, channel.homeTeam, channel.awayTeam);
+                if (match == null) {
+                    continue;
+                }
+                String thumb = firstNonEmpty(match.optString("strThumb"), match.optString("strPoster"), match.optString("strSquare"));
+                if (!thumb.isEmpty()) {
+                    channel.thumbUrl = thumb;
+                }
+                String leagueBadge = firstNonEmpty(match.optString("strLeagueBadge"), match.optString("strBadge"));
+                if (!leagueBadge.isEmpty()) {
+                    channel.leagueBadgeUrl = leagueBadge;
+                }
+                String homeBadge = match.optString("strHomeTeamBadge");
+                if (!homeBadge.isEmpty()) {
+                    channel.homeFlagUrl = homeBadge;
+                }
+                String awayBadge = match.optString("strAwayTeamBadge");
+                if (!awayBadge.isEmpty()) {
+                    channel.awayFlagUrl = awayBadge;
+                }
+            }
+        } catch (Exception ignored) {
+            // Enrichment is best-effort; the agenda still works without it.
+        }
+    }
+
+    private JSONObject findSportsDbMatch(List<JSONObject> sdbEvents, String home, String away) {
+        String h = normalizeText(home).replaceAll("[^a-z0-9 ]", " ").trim();
+        String a = normalizeText(away).replaceAll("[^a-z0-9 ]", " ").trim();
+        if (h.isEmpty() || a.isEmpty()) {
+            return null;
+        }
+        for (JSONObject event : sdbEvents) {
+            String eh = normalizeText(event.optString("strHomeTeam")).replaceAll("[^a-z0-9 ]", " ").trim();
+            String ea = normalizeText(event.optString("strAwayTeam")).replaceAll("[^a-z0-9 ]", " ").trim();
+            if ((teamsMatch(h, eh) && teamsMatch(a, ea)) || (teamsMatch(h, ea) && teamsMatch(a, eh))) {
+                return event;
+            }
+        }
+        return null;
+    }
+
+    private boolean teamsMatch(String shortName, String fullName) {
+        if (shortName.isEmpty() || fullName.isEmpty()) {
+            return false;
+        }
+        if (fullName.contains(shortName) || shortName.contains(fullName)) {
+            return true;
+        }
+        for (String token : shortName.split(" ")) {
+            if (token.length() >= 4 && fullName.contains(token)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String flagCdnUrl(String teamName) {
+        String code = teamToFlagCode(teamName);
+        return code.isEmpty() ? "" : "https://flagcdn.com/w160/" + code + ".png";
+    }
+
+    private String mapToSportsDbSport(String sportName, String leagueName) {
+        String s = normalizeText(sportName + " " + leagueName);
+        if (s.contains("basket") || s.contains("nba") || s.contains("wnba")) return "Basketball";
+        if (s.contains("american football") || s.contains("nfl")) return "American Football";
+        if (s.contains("hockey") || s.contains("nhl")) return "Ice Hockey";
+        if (s.contains("baseball") || s.contains("beisbol") || s.contains("mlb")) return "Baseball";
+        if (s.contains("tennis")) return "Tennis";
+        if (s.contains("rugby")) return "Rugby";
+        if (s.contains("volley")) return "Volleyball";
+        if (s.contains("motor") || s.contains("formula") || s.contains("f1")) return "Motorsport";
+        if (s.contains("mma") || s.contains("ufc") || s.contains("box") || s.contains("fight")) return "Fighting";
+        if (s.contains("cricket")) return "Cricket";
+        if (s.contains("handball")) return "Handball";
+        return "Soccer";
+    }
+
     private List<Channel> parseCached(String key, boolean channelsPayload) {
         String body = cacheStore.getString(key);
         if (body.isEmpty()) {
             return new ArrayList<>();
         }
 
-        return channelsPayload ? parseStreamxChannels(body) : parseStreamxEvents(body);
+        return channelsPayload ? parseStreamxChannels(body) : parseStreamxEvents(body, false);
     }
 
     private List<ChannelSource> parseEventSources(JSONObject event) {
@@ -523,7 +675,7 @@ public class ChannelRepository {
         if (!home.isEmpty() && !away.isEmpty()) {
             return flagEmoji(home) + " " + flagEmoji(away);
         }
-        return "CUP";
+        return "";
     }
 
     private String teamToFlagCode(String teamName) {
