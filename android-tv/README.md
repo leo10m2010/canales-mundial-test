@@ -1,116 +1,64 @@
-# Canales Mundial TV para Android TV
+# Mundial+ para Android TV
 
-App Android TV hibrida nativa para `canal-mundi-2026`.
+La aplicación Android TV muestra directamente la experiencia oficial de
+`https://mundialplus.netlify.app/?mode=tv`. De esta forma la portada, agenda,
+imágenes, colores, player y selector de canales se mantienen idénticos a la web.
 
-La pantalla principal no carga toda la web en un WebView. Usa una grilla Android nativa, boot screen propio, estado online/offline/cache y foco diseñado para control remoto. El WebView solo se usa dentro del player al abrir una fuente.
+`MainActivity` añade la integración que no ofrece un navegador convencional:
 
-## Arquitectura
-
-```text
-MainActivity.java      Pantalla nativa TV con grilla de canales
-PlayerActivity.java    Player fullscreen con WebView por fuente
-Channel.java           Modelo de canal
-ChannelSource.java     Modelo de fuente
-ChannelRepository.java Lee res/raw/channels.json
-CacheStore.java        Guarda la ultima respuesta valida de Netlify
-ConnectivityHelper.java Detecta internet/offline
-TvStyle.java           Colores, fondos y helpers visuales
-res/raw/channels.json  Lista local tomada de channels.js
-```
-
-Al abrir, la app pinta primero los canales locales y luego intenta cargar:
-
-```text
-https://streamx-hd.com/canales/canales.json
-https://streamx-hd.com/eventos.json
-```
-
-Los canales 24/7 aparecen en `Canales 24/7 Stream-XHD`. Los eventos del Mundial con servidores aparecen en `Agenda Mundial 2026`. La app muestra los partidos de hoy si existen; si no hay partidos hoy, muestra la proxima fecha disponible con fuentes.
-
-Cuando la agenda trae fuentes `streamhdx.xyz`, la app las prioriza sobre fuentes `live1` y las etiqueta como `HD 1080` en el selector de fuentes. No se inventan URLs: solo se usan fuentes que llegan desde las APIs o desde `channels.json`.
-
-Si no hay internet, la app abre igual con `channels.json` y, si existe, la ultima cache guardada. La reproduccion de una fuente si requiere internet.
-
-## Controles
-
-Pantalla principal:
-
-```text
-Flechas: navegar canales
-OK/Enter: abrir canal
-Menu: actualizar Netlify si hay internet
-Back: mandar app al fondo
-```
-
-Player:
-
-```text
-Back: cerrar vista doble si esta activa; si no, volver a la grilla
-Menu: abrir/cerrar selector de fuentes y acciones de ventana
-ChannelUp: siguiente canal o partido de la misma seccion
-ChannelDown: canal o partido anterior de la misma seccion
-Vista doble: abrir segunda ventana desde el menu del player
-Arriba/Abajo: cambiar ventana activa cuando la vista doble esta abierta
-OK/Flechas: se envian al WebView o al selector si esta abierto
-```
-
-Estados del player:
-
-```text
-Cargando fuente: overlay nativo mientras carga WebView
-Sin conexion: error nativo con Reintentar / Volver
-Fuente lenta o fallida: Reintentar / Siguiente fuente / Volver
-Fuente lenta o fallida con playlist: Reintentar / Siguiente fuente / Siguiente canal / Volver
-```
+- Modo inmersivo y orientación horizontal.
+- D-pad, OK, Menu, Channel Up/Down y controles multimedia traducidos al modo TV.
+- En las tarjetas de eventos, el D-pad enfoca directamente `Ver transmisión` y
+  omite estrellas y acciones secundarias.
+- Android activa autoplay dentro del reproductor StreamX antes de inicializar
+  Clappr, sin depender de un clic sobre el iframe.
+- OK o Menu abre la barra lateral. Las cuatro flechas recorren sus herramientas,
+  OK activa la seleccionada y Back/Menu cierra el menú. Canales sigue disponible
+  como la primera herramienta.
+- Fuera del menú, la barra y la ayuda desaparecen tras tres segundos sin actividad.
+- El billboard usa la imagen del evento y tiene un fondo local garantizado cuando
+  una imagen o vista previa externa no es compatible con Android TV.
+- Las herramientas activan directamente sus handlers web después de fijar el modo
+  de navegación, evitando que una pulsación rápida vuelva al selector de canales.
+- Back cierra primero los paneles/player de la web y después minimiza la app.
+- Fullscreen nativo para contenido que lo solicite.
+- Caché HTTP, almacenamiento local y cookies para conservar preferencias.
+- Pantalla de carga nativa con progreso real y límite de espera de 20 segundos.
+- Pantalla nativa de reconexión enfocable cuando falla la carga principal.
+- Navegación principal restringida al dominio oficial.
+- Descargas StreamX limitadas a HTTPS, HTML válido y un máximo de 2 MB.
 
 ## Compilar
-
-Desde esta carpeta:
 
 ```powershell
 .\gradlew.bat assembleDebug
 ```
 
-APK generada:
+APK:
 
 ```text
 app\build\outputs\apk\debug\app-debug.apk
 ```
 
-## Instalar en Android TV
+El workflow `Android TV APK` de GitHub Actions ejecuta tests, lint y compilación
+cuando cambia `android-tv/`. La APK se publica durante 30 días como el artifact
+`mundial-plus-android-tv-debug`.
 
-Por ADB:
+La versión actual es `5.0` (`versionCode 9`). El release usa R8 y elimina recursos
+sin uso.
 
-```powershell
-adb connect IP_DEL_TV:5555
-adb install -r .\app\build\outputs\apk\debug\app-debug.apk
-adb shell monkey -p com.leo10m2010.canalesmundialtv 1
+## Emulador de Android Studio
+
+Inicia un dispositivo Android TV desde Device Manager y ejecuta la configuración
+`app`. El emulador se conecta directamente a Mundial+ por HTTPS; no requiere un
+televisor físico ni configurar una conexión ADB externa.
+
+Controles principales:
+
+```text
+Flechas: navegar por la interfaz y cambiar fuentes en el player
+OK/Enter: activar la opción enfocada
+Menu: abrir o cerrar la barra de herramientas
+Channel Up/Down: cambiar canal
+Back: cerrar selector, vista doble o player; en Inicio minimiza la app
 ```
-
-O copia `app-debug.apk` a un USB e instalala desde el TV Box.
-
-## Probar control remoto por ADB
-
-```powershell
-adb shell input keyevent 19
-adb shell input keyevent 20
-adb shell input keyevent 21
-adb shell input keyevent 22
-adb shell input keyevent 23
-adb shell input keyevent 4
-adb shell input keyevent 82
-adb shell input keyevent 166
-adb shell input keyevent 167
-```
-
-## Notas
-
-- La app usa `LEANBACK_LAUNCHER`, por eso aparece en el launcher de Android TV.
-- `MainActivity` es nativa; no depende de `https://canal-mundi-2026.netlify.app/?mode=tv` para pintar el menu.
-- `PlayerActivity` abre directamente la URL de la fuente seleccionada.
-- Los flags se muestran como insignias por pais cuando el API trae `country`; `GL` indica global y `CUP` indica evento del Mundial.
-- Los partidos de la agenda muestran banderas de ambos equipos cuando el nombre del equipo se puede mapear a pais.
-- Si las APIs fallan, la app queda usable con los canales locales incluidos en `res/raw/channels.json`.
-- La ultima respuesta valida de Netlify queda guardada en cache para abrir la app aunque no haya internet.
-- Ninguna pantalla usa botones Android default para la UX principal; las cards, acciones y filas tienen fondos/foco custom.
-- No se modifica ni evade ninguna restriccion de terceros. Si un embed bloquea WebView, DRM, iframe, fullscreen o permisos, se debe respetar ese bloqueo.

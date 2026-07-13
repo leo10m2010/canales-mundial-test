@@ -6,16 +6,28 @@ android {
     namespace "com.leo10m2010.canalesmundialtv"
     compileSdk 35
 
+    buildFeatures {
+        buildConfig true
+    }
+
     defaultConfig {
         applicationId "com.leo10m2010.canalesmundialtv"
         minSdk 23
         targetSdk 35
-        versionCode 3
-        versionName "3.0"
+        versionCode 9
+        versionName "5.0"
     }
 
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+        }
     }
 }

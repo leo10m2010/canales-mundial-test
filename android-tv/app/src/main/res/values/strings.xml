@@ -1,3 +1,10 @@
 <resources>
     <string name="app_name">Mundial+</string>
+    <string name="loading_title">Mundial+</string>
+    <string name="loading_message">Preparando tu señal</string>
+    <string name="loading_progress">Cargando %1$d%%</string>
+    <string name="connection_error_title">No se pudo conectar</string>
+    <string name="connection_error_message">Revisa la conexión a internet e inténtalo nuevamente.</string>
+    <string name="connection_timeout_message">La carga está tardando demasiado. Inténtalo nuevamente.</string>
+    <string name="retry">Reintentar</string>
 </resources>

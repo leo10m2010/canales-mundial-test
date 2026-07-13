@@ -2,8 +2,6 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-
     <uses-feature
         android:name="android.software.leanback"
         android:required="true" />
@@ -26,15 +24,7 @@
         android:usesCleartextTraffic="false">
 
         <activity
-            android:name=".PlayerActivity"
-            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize"
-            android:exported="false"
-            android:screenOrientation="landscape"
-            tools:ignore="DiscouragedApi" />
-
-        <activity
             android:name=".MainActivity"
-            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize"
             android:exported="true"
             android:screenOrientation="landscape"
             tools:ignore="DiscouragedApi">
