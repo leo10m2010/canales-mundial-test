@@ -42,6 +42,10 @@ const SELECTORS = {
   lastUpdated: "#lastUpdated",
   refreshStreamxButton: "#refreshStreamxButton",
   tvOverlay: "#tvOverlay",
+  sceneTransition: "#sceneTransition",
+  sceneTransitionLabel: "#sceneTransitionLabel",
+  sceneTransitionPlayer: "#sceneTransitionPlayer",
+  sceneTransitionPlayerLabel: "#sceneTransitionPlayerLabel",
 };
 
 const dom = Object.fromEntries(
@@ -147,6 +151,8 @@ const EMBED_SANDBOX = "allow-scripts allow-same-origin allow-forms allow-present
 const DEMO_URL = "https://www.youtube.com/embed/dQw4w9WgXcQ";
 const CONTROLS_HIDE_DELAY = 2600;
 const TOAST_HIDE_DELAY = 2400;
+const SCENE_TRANSITION_HOLD_MS = 380;
+const SCENE_TRANSITION_END_MS = 530;
 const SOURCE_NAVIGATION_COOLDOWN = 360;
 const WORLD_CUP_LIVE_REFRESH_INTERVAL = 30000;
 const WORLD_CUP_SOON_REFRESH_INTERVAL = 60000;
@@ -234,6 +240,8 @@ const REMOTE_TV_ACTIVATION_KEYS = new Set(["Accept", "Select", "GoBack", "Browse
 const pendingFetches = new Map();
 let controlsHideTimer = 0;
 let toastHideTimer = 0;
+let sceneTransitionTimer = 0;
+let sceneTransitionCleanupTimer = 0;
 let remoteDebugTimer = 0;
 let scoreRefreshTimer = 0;
 let streamxRefreshTimer = 0;
@@ -1996,6 +2004,34 @@ function filterAgendaByView(events, view) {
   });
 }
 
+function playSceneTransition(label) {
+  if (window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) {
+    return;
+  }
+
+  window.clearTimeout(sceneTransitionTimer);
+  window.clearTimeout(sceneTransitionCleanupTimer);
+  const transitions = [
+    [dom.sceneTransition, dom.sceneTransitionLabel],
+    [dom.sceneTransitionPlayer, dom.sceneTransitionPlayerLabel],
+  ];
+
+  transitions.forEach(([transition, transitionLabel]) => {
+    transitionLabel.textContent = cleanText(label);
+    transition.classList.remove("is-active", "is-leaving");
+    void transition.offsetWidth;
+    transition.classList.add("is-active");
+  });
+
+  sceneTransitionTimer = window.setTimeout(() => {
+    transitions.forEach(([transition]) => transition.classList.add("is-leaving"));
+  }, SCENE_TRANSITION_HOLD_MS);
+
+  sceneTransitionCleanupTimer = window.setTimeout(() => {
+    transitions.forEach(([transition]) => transition.classList.remove("is-active", "is-leaving"));
+  }, SCENE_TRANSITION_END_MS);
+}
+
 function getFavoriteEventKey(event) {
   return String(event.id || toBase64Id(`${event.title}|${event.time || event.parsedDate?.toISOString?.() || ""}`));
 }
@@ -2013,6 +2049,7 @@ function setAgendaView(view) {
     return;
   }
 
+  playSceneTransition(AGENDA_VIEWS[view].label);
   selectedAgendaView = view;
   syncAgendaViewTabs();
   updateAgendaHero();
@@ -4288,6 +4325,10 @@ async function openPlayer(embed, options = {}) {
     return;
   }
 
+  if (wasHidden) {
+    playSceneTransition("En vivo");
+  }
+
   rememberPlayerReturnFocus();
 
   if (paneId === PLAYER_PANES.PRIMARY && !options.keepSplit) {
@@ -4441,6 +4482,7 @@ async function closePlayer(options = {}) {
     }
   }
 
+  playSceneTransition("Inicio");
   toggleChannelSwitcher(false);
   dom.player.hidden = true;
   dom.setupPanel.hidden = false;

@@ -13,6 +13,13 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
+    <div class="scene-transition" id="sceneTransition" aria-hidden="true">
+      <div class="scene-transition__mark">
+        <span class="scene-transition__logo" data-brand="Mundial+">Mundial+</span>
+        <span class="scene-transition__label" id="sceneTransitionLabel"></span>
+      </div>
+    </div>
+
     <main class="home" id="setupPanel">
       <section class="billboard" id="billboard">
         <div class="top-nav">
@@ -158,6 +165,12 @@
     </main>
 
     <section class="player" id="player" aria-label="Reproductor embed" hidden>
+      <div class="scene-transition scene-transition--player" id="sceneTransitionPlayer" aria-hidden="true">
+        <div class="scene-transition__mark">
+          <span class="scene-transition__logo" data-brand="Mundial+">Mundial+</span>
+          <span class="scene-transition__label" id="sceneTransitionPlayerLabel"></span>
+        </div>
+      </div>
       <div class="player-grid" id="playerGrid">
         <section class="player-pane is-primary is-active" id="primaryPlayerPane" data-pane="primary" tabindex="-1" aria-label="Ventana 1">
           <button class="pane-badge" type="button" data-activate-pane="primary" aria-label="Activar ventana 1">Ventana 1</button>
