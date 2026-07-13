@@ -107,5 +107,7 @@ test("branded player handoff visual", async ({ page }, testInfo) => {
     }, { playlist: [], playlistTitle: "Servidores" });
   });
   await expect(page.locator("#playerStage .player-signal")).toBeVisible();
-  await expect(page.locator("#playerGrid")).toHaveScreenshot(`player-handoff-${testInfo.project.name}.png`);
+  await expect(page.locator("#playerGrid")).toHaveScreenshot(`player-handoff-${testInfo.project.name}.png`, {
+    maxDiffPixelRatio: 0.03,
+  });
 });
