@@ -44,8 +44,10 @@ const SELECTORS = {
   tvOverlay: "#tvOverlay",
   sceneTransition: "#sceneTransition",
   sceneTransitionLabel: "#sceneTransitionLabel",
+  sceneTransitionDetail: "#sceneTransitionDetail",
   sceneTransitionPlayer: "#sceneTransitionPlayer",
   sceneTransitionPlayerLabel: "#sceneTransitionPlayerLabel",
+  sceneTransitionPlayerDetail: "#sceneTransitionPlayerDetail",
 };
 
 const dom = Object.fromEntries(
@@ -141,6 +143,15 @@ const THESPORTSDB_EVENTS_URL = "/.netlify/functions/thesportsdb-events";
 const PARTICIPANT_PROFILES_URL = "/.netlify/functions/participant-profiles";
 const IMAGE_PROXY_URL = "/.netlify/functions/image-proxy";
 const EVENT_ARTWORK_URL = "/.netlify/functions/event-artwork";
+const OPTIMIZABLE_IMAGE_HOSTS = new Set([
+  "r2.thesportsdb.com",
+  "www.thesportsdb.com",
+  "disney.images.edge.bamgrid.com",
+  "a.espncdn.com",
+  "static.vecteezy.com",
+  "flagcdn.com",
+  "upload.wikimedia.org",
+]);
 const STREAMX_CANONICAL_HOST = "streamx-hd.com";
 const STREAMX_CANONICAL_ORIGIN = `https://${STREAMX_CANONICAL_HOST}`;
 const STREAMX_LEGACY_HOSTS = new Set(["stream-xhd.com", "www.stream-xhd.com"]);
@@ -162,6 +173,11 @@ const CHANNELS_REFRESH_INTERVAL = 600000;
 const CLIENT_FETCH_TIMEOUT_MS = 10000;
 const UPCOMING_LIVE_CHECK_WINDOW = 45 * 60000;
 const BILLBOARD_PREVIEW_TIMEOUT = 12000;
+const PLAYER_SOURCE_TIMEOUT = Math.max(
+  1000,
+  Math.min(12000, Number(new URLSearchParams(window.location.search).get("sourceTimeout")) || 12000)
+);
+const PLAYER_REVEAL_DELAY = 650;
 const WORLDCUP_BILLBOARD_WINDOW = 2 * 60 * 60 * 1000;
 const PLAYER_MODES = { PC: "pc", TV: "tv" };
 const PLAYER_PANES = { PRIMARY: "primary", SECONDARY: "secondary" };
@@ -256,6 +272,7 @@ let participantProfiles = new Map();
 const imagePaletteCache = new Map();
 const eventPaletteCache = new Map();
 const eventArtworkCache = new Map();
+const preloadedBillboardImages = new Set();
 let pagePaletteRequest = 0;
 let streamxLoading = false;
 let worldcupLoading = false;
@@ -344,6 +361,12 @@ function createPaneState() {
     playlist: [],
     playlistTitle: "",
     sourceKey: "",
+    currentEmbed: "",
+    currentTitle: "",
+    attemptTimer: 0,
+    failoverTimer: 0,
+    attemptGeneration: 0,
+    attemptedSourceKeys: new Set(),
   };
 }
 
@@ -353,6 +376,10 @@ function getPaneState(paneId = activePaneId) {
 
 function getPaneStage(paneId = activePaneId) {
   return paneId === PLAYER_PANES.SECONDARY ? dom.secondaryPlayerStage : dom.playerStage;
+}
+
+function getPaneElement(paneId = activePaneId) {
+  return paneId === PLAYER_PANES.SECONDARY ? dom.secondaryPlayerPane : dom.primaryPlayerPane;
 }
 
 function getPaneMatchElement(paneId = activePaneId) {
@@ -2004,7 +2031,7 @@ function filterAgendaByView(events, view) {
   });
 }
 
-function playSceneTransition(label) {
+function playSceneTransition(label, options = {}) {
   if (window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) {
     return;
   }
@@ -2013,12 +2040,14 @@ function playSceneTransition(label) {
   window.clearTimeout(sceneTransitionCleanupTimer);
   document.body.classList.add("is-scene-transitioning");
   const transitions = [
-    [dom.sceneTransition, dom.sceneTransitionLabel],
-    [dom.sceneTransitionPlayer, dom.sceneTransitionPlayerLabel],
+    [dom.sceneTransition, dom.sceneTransitionLabel, dom.sceneTransitionDetail],
+    [dom.sceneTransitionPlayer, dom.sceneTransitionPlayerLabel, dom.sceneTransitionPlayerDetail],
   ];
 
-  transitions.forEach(([transition, transitionLabel]) => {
+  transitions.forEach(([transition, transitionLabel, transitionDetail]) => {
     transitionLabel.textContent = cleanText(label);
+    transitionDetail.textContent = cleanText(options.detail || "");
+    transition.dataset.variant = options.variant || "default";
     transition.classList.remove("is-active", "is-leaving");
     void transition.offsetWidth;
     transition.classList.add("is-active");
@@ -2031,7 +2060,10 @@ function playSceneTransition(label) {
 
   sceneTransitionCleanupTimer = window.setTimeout(() => {
     document.body.classList.remove("is-scene-transitioning");
-    transitions.forEach(([transition]) => transition.classList.remove("is-active", "is-leaving"));
+    transitions.forEach(([transition]) => {
+      transition.classList.remove("is-active", "is-leaving");
+      delete transition.dataset.variant;
+    });
   }, SCENE_TRANSITION_END_MS);
 }
 
@@ -2052,7 +2084,10 @@ function setAgendaView(view) {
     return;
   }
 
-  playSceneTransition(AGENDA_VIEWS[view].label);
+  playSceneTransition(AGENDA_VIEWS[view].label, {
+    detail: AGENDA_VIEWS[view].subtitle,
+    variant: view,
+  });
   selectedAgendaView = view;
   syncAgendaViewTabs();
   updateAgendaHero();
@@ -2080,8 +2115,11 @@ function pickFeaturedAgendaEvent(events) {
 
   const hasServers = (event) => (event.serverItems || getEventServerItems(event)).length > 0;
   const teamEvents = events.filter((event) => event.hasTeams);
-  const withServers = teamEvents.filter(hasServers);
-  const pool = withServers.length ? withServers : (teamEvents.length ? teamEvents : events);
+  const playableEvents = events.filter(hasServers);
+  const playableTeamEvents = teamEvents.filter(hasServers);
+  const pool = playableTeamEvents.length
+    ? playableTeamEvents
+    : (playableEvents.length ? playableEvents : (teamEvents.length ? teamEvents : events));
   const statusOf = (event) => (event.statusInfo || getAgendaStatus(event)).key;
   const isWorldcup = (event) => Boolean(event.worldcupGame || event.isWorldcup || isWorldCupEvent(event, { name: event.leagueName }));
   const startsWithinWorldcupWindow = (event) => {
@@ -2180,7 +2218,8 @@ function makeBillboardPreviewUrl(sourceUrl) {
 function resolveBillboardArtwork(event) {
   const homeTeam = cleanText(event.worldcupGame?.homeTeam || event.homeTeam || "");
   const awayTeam = cleanText(event.worldcupGame?.awayTeam || event.awayTeam || "");
-  const cacheKey = `${canonicalTeamName(homeTeam)}|${canonicalTeamName(awayTeam)}`;
+  const eventDate = event.parsedDate?.toISOString?.() || event.date || "";
+  const cacheKey = `${event.id || "event"}|${canonicalTeamName(homeTeam)}|${canonicalTeamName(awayTeam)}|${eventDate}`;
 
   if (!homeTeam || !awayTeam) {
     return Promise.resolve("");
@@ -2195,6 +2234,62 @@ function resolveBillboardArtwork(event) {
     .catch(() => "");
   eventArtworkCache.set(cacheKey, request);
   return request;
+}
+
+function getResponsiveImageUrl(value, width) {
+  const url = firstImageUrl(value);
+  if (!url) return "";
+
+  try {
+    const parsed = new URL(url, window.location.href);
+    if (!OPTIMIZABLE_IMAGE_HOSTS.has(parsed.hostname.toLowerCase())) return parsed.href;
+    return `/.netlify/images?url=${encodeURIComponent(parsed.href)}&w=${width}&q=78&fit=cover`;
+  } catch (error) {
+    return url;
+  }
+}
+
+function preloadBillboardImage(url) {
+  if (!url || preloadedBillboardImages.has(url)) return;
+  preloadedBillboardImages.add(url);
+  const preload = document.createElement("link");
+  preload.rel = "preload";
+  preload.as = "image";
+  preload.href = getResponsiveImageUrl(url, 1280);
+  preload.setAttribute("imagesrcset", [640, 960, 1280, 1920]
+    .map((width) => `${getResponsiveImageUrl(url, width)} ${width}w`)
+    .join(", "));
+  preload.setAttribute("imagesizes", "100vw");
+  document.head.append(preload);
+}
+
+function setBillboardArtwork(thumb, url) {
+  if (!url) return;
+  preloadBillboardImage(url);
+  const image = document.createElement("img");
+  image.className = "highlights-artwork";
+  image.alt = "";
+  image.loading = "eager";
+  image.decoding = "async";
+  image.fetchPriority = "high";
+  image.sizes = "100vw";
+  image.srcset = [640, 960, 1280, 1920]
+    .map((width) => `${getResponsiveImageUrl(url, width)} ${width}w`)
+    .join(", ");
+  image.src = getResponsiveImageUrl(url, 1280);
+  image.addEventListener("load", () => thumb.classList.remove("is-empty"), { once: true });
+  image.addEventListener("error", () => {
+    if (image.dataset.rawFallback) {
+      image.remove();
+      thumb.classList.add("is-empty");
+      return;
+    }
+    image.dataset.rawFallback = "true";
+    image.removeAttribute("srcset");
+    image.src = url;
+  });
+  thumb.querySelector(".highlights-artwork")?.remove();
+  thumb.prepend(image);
 }
 
 let highlightsKey = "";
@@ -2220,7 +2315,7 @@ function updateHighlightsCard(events) {
   const title = featured.hasTeams && featured.homeTeam && featured.awayTeam
     ? `${featured.homeTeam} vs ${featured.awayTeam}`
     : cleanText(featured.title || "Evento destacado");
-  const poster = firstImageUrl(featured.matchThumb);
+  const poster = firstImageUrl(featured.matchThumb, featured.eventLogo, featured.leagueLogo);
   const desiredKey = `${isLive ? `live:${getItemKey(servers[0])}` : `static:${featured.id}`}|${poster}`;
 
   card.hidden = false;
@@ -2242,13 +2337,12 @@ function updateHighlightsCard(events) {
   const thumb = createElement("div", "highlights-thumb");
 
   if (poster) {
-    thumb.style.backgroundImage = `url("${poster}")`;
+    setBillboardArtwork(thumb, poster);
   } else {
     thumb.classList.add("is-empty");
     resolveBillboardArtwork(featured).then((artwork) => {
       if (artwork && card.dataset.featuredEvent === String(featured.id) && thumb.isConnected) {
-        thumb.style.backgroundImage = `url("${artwork}")`;
-        thumb.classList.remove("is-empty");
+        setBillboardArtwork(thumb, artwork);
       }
     });
   }
@@ -2353,7 +2447,7 @@ function createBillboardTeam(name, logo) {
     const img = document.createElement("img");
     img.src = logo;
     img.alt = "";
-    img.loading = "lazy";
+    img.loading = "eager";
     img.onerror = () => img.remove();
     wrap.append(img);
   }
@@ -2389,7 +2483,7 @@ function renderAgenda() {
   dom.agendaGrid.replaceChildren();
   renderAgendaSportTabs(availableAgendaSports, streamAgendaEvents, worldcupAgendaEvents);
   renderAgendaDateTabs(availableAgendaDates, sportAgendaEvents);
-  updateHighlightsCard(sourceAgendaEvents);
+  updateHighlightsCard(agendaEvents.length ? agendaEvents : sourceAgendaEvents);
   dom.agendaCount.textContent = `${agendaEvents.length} evento${agendaEvents.length === 1 ? "" : "s"}`;
 
   if ((streamxLoading || worldcupLoading) && !sourceAgendaEvents.length) {
@@ -3276,7 +3370,7 @@ function getEmbedSrc(value) {
   return normalizeEmbed(value);
 }
 
-function createEmbedFrame(src, title = "Player embed") {
+function createEmbedFrame(src, title = "Player embed", options = {}) {
   const frame = document.createElement("iframe");
   frame.title = cleanText(title) || "Player embed";
   frame.width = "100%";
@@ -3291,7 +3385,9 @@ function createEmbedFrame(src, title = "Player embed") {
   frame.setAttribute("allowtransparency", "true");
   frame.setAttribute("playsinline", "true");
   frame.referrerPolicy = "no-referrer";
-  frame.src = src;
+  if (!options.deferSrc) {
+    frame.src = src;
+  }
   return frame;
 }
 
@@ -3327,6 +3423,65 @@ function createIosPlaybackHint() {
     createElement("span", "", "Toca el reproductor para iniciar el video")
   );
   return hint;
+}
+
+function getPlayerSignalContext(paneId = activePaneId) {
+  const paneState = getPaneState(paneId);
+  const items = getNavigationItems(paneId);
+  const index = items.findIndex((item) => getItemKey(item) === paneState.sourceKey);
+  const title = paneState.match
+    ? formatCompactMatchTitle(paneState.match)
+    : cleanText(paneState.item?.name || paneState.item?.sourceName || "Transmisión en vivo");
+  const source = cleanText(paneState.item?.sourceName || "Señal principal");
+  const position = items.length > 1 && index >= 0 ? ` · Fuente ${index + 1} de ${items.length}` : "";
+
+  return { title, detail: `${source}${position}` };
+}
+
+function createPlayerSignalOverlay(paneId = activePaneId) {
+  const context = getPlayerSignalContext(paneId);
+  const overlay = createElement("div", "player-signal is-loading");
+  overlay.dataset.playerState = "loading";
+  overlay.setAttribute("role", "status");
+  overlay.setAttribute("aria-live", "polite");
+
+  const identity = createElement("div", "player-signal-identity");
+  identity.append(
+    createElement("span", "player-signal-monogram", "M+"),
+    createElement("span", "player-signal-kicker", "Preparando señal")
+  );
+  const title = createElement("strong", "player-signal-title", context.title);
+  const detail = createElement("span", "player-signal-detail", context.detail);
+  const progress = createElement("span", "player-signal-progress");
+  progress.setAttribute("aria-hidden", "true");
+
+  const actions = createElement("div", "player-signal-actions");
+  const retry = createElement("button", "player-signal-action is-primary", "Reintentar");
+  const next = createElement("button", "player-signal-action", "Otra fuente");
+  retry.type = "button";
+  next.type = "button";
+  retry.addEventListener("click", () => retryCurrentSource(paneId));
+  next.addEventListener("click", () => openItemByOffset(1, paneId));
+  actions.append(retry, next);
+  overlay.append(identity, title, detail, progress, actions);
+  return overlay;
+}
+
+function setPlayerSignalState(paneId, state, title, detail) {
+  const pane = getPaneElement(paneId);
+  const overlay = getPaneStage(paneId).querySelector(".player-signal");
+  if (!overlay) return;
+
+  overlay.className = `player-signal is-${state}`;
+  overlay.dataset.playerState = state;
+  pane.dataset.playerState = state;
+  pane.setAttribute("aria-busy", String(state === "loading" || state === "switching"));
+  const kicker = overlay.querySelector(".player-signal-kicker");
+  const titleNode = overlay.querySelector(".player-signal-title");
+  const detailNode = overlay.querySelector(".player-signal-detail");
+  if (kicker) kicker.textContent = state === "failed" ? "Señal no disponible" : state === "switching" ? "Buscando otra señal" : state === "ready" ? "Señal abierta" : "Preparando señal";
+  if (titleNode && title) titleNode.textContent = cleanText(title);
+  if (detailNode && detail) detailNode.textContent = cleanText(detail);
 }
 
 function createElement(tagName, className, text) {
@@ -3813,7 +3968,10 @@ function closeSecondaryPane(options = {}) {
     return;
   }
 
+  cancelPaneAttempt(PLAYER_PANES.SECONDARY);
   dom.secondaryPlayerStage.replaceChildren();
+  delete dom.secondaryPlayerPane.dataset.playerState;
+  dom.secondaryPlayerPane.removeAttribute("aria-busy");
   dom.secondaryPlayerPane.hidden = true;
   playerPaneStates[PLAYER_PANES.SECONDARY] = createPaneState();
   activePaneId = PLAYER_PANES.PRIMARY;
@@ -4006,6 +4164,82 @@ function getItemKey(item) {
   return item?.sourceKey || item?.sourceUrl || "";
 }
 
+function dedupeSourceItems(items) {
+  const seen = new Set();
+  return (Array.isArray(items) ? items : []).filter((item) => {
+    const key = item?.sourceUrl || getItemKey(item);
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function cancelPaneAttempt(paneId = activePaneId) {
+  const paneState = getPaneState(paneId);
+  window.clearTimeout(paneState.attemptTimer);
+  window.clearTimeout(paneState.failoverTimer);
+  paneState.attemptTimer = 0;
+  paneState.failoverTimer = 0;
+  paneState.attemptGeneration += 1;
+}
+
+function getNextUnattemptedSource(paneId = activePaneId) {
+  const paneState = getPaneState(paneId);
+  const items = dedupeSourceItems(getNavigationItems(paneId));
+  if (!items.length) return null;
+  const currentIndex = Math.max(0, items.findIndex((item) => getItemKey(item) === paneState.sourceKey));
+
+  for (let step = 1; step <= items.length; step += 1) {
+    const candidate = items[(currentIndex + step) % items.length];
+    if (!paneState.attemptedSourceKeys.has(getItemKey(candidate))) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+function handlePlayerSourceFailure(paneId, generation, reason = "La fuente tardó demasiado") {
+  const paneState = getPaneState(paneId);
+  if (generation !== paneState.attemptGeneration || dom.player.hidden) return;
+
+  window.clearTimeout(paneState.attemptTimer);
+  paneState.attemptTimer = 0;
+  paneState.attemptedSourceKeys.add(paneState.sourceKey || paneState.item?.sourceUrl || "");
+  const nextSource = getNextUnattemptedSource(paneId);
+
+  if (nextSource) {
+    const items = getNavigationItems(paneId);
+    const nextIndex = items.findIndex((item) => getItemKey(item) === getItemKey(nextSource));
+    setPlayerSignalState(paneId, "switching", "Buscando otra señal", `Probando fuente ${nextIndex + 1} de ${items.length}`);
+    playSceneTransition("Buscando señal", {
+      detail: `Fuente ${nextIndex + 1} de ${items.length}`,
+      variant: "switching",
+    });
+    showChannelToast({ ...nextSource, sourceName: "Cambio automático de señal" }, paneId);
+    paneState.failoverTimer = window.setTimeout(() => {
+      if (generation !== paneState.attemptGeneration || dom.player.hidden) return;
+      paneState.failoverTimer = 0;
+      openItem(nextSource, {
+        paneId,
+        automaticFailover: true,
+        keepPlaylist: true,
+        keepSplit: true,
+        keepFullscreen: true,
+        silentToast: true,
+      });
+    }, 120);
+    return;
+  }
+
+  setPlayerSignalState(paneId, "failed", "No pudimos abrir esta transmisión", `${reason}. Reintenta o elige otra fuente.`);
+  if (isTvMode()) {
+    tvOverlayLocked = false;
+    syncTvOverlay();
+    window.setTimeout(() => getPaneStage(paneId).querySelector(".player-signal-action")?.focus({ preventScroll: true }), 0);
+  }
+}
+
 function openItemByOffset(offset, paneId = activePaneId) {
   const items = getNavigationItems(paneId);
 
@@ -4106,13 +4340,17 @@ function syncEmbedSecurityButton() {
 }
 
 function reloadPlayerFramesForSecurityMode() {
-  [dom.playerStage, dom.secondaryPlayerStage].forEach((stage) => {
-    const currentFrame = stage.querySelector("iframe");
-    if (!currentFrame) return;
-
-    const replacement = createEmbedFrame(currentFrame.src, currentFrame.title);
-    replacement.className = currentFrame.className;
-    currentFrame.replaceWith(replacement);
+  Object.values(PLAYER_PANES).forEach((paneId) => {
+    const paneState = getPaneState(paneId);
+    if (!paneState.currentEmbed) return;
+    openPlayer(paneState.currentEmbed, {
+      paneId,
+      title: paneState.currentTitle,
+      sourceKey: paneState.sourceKey,
+      keepPlaylist: true,
+      keepSplit: true,
+      keepFullscreen: true,
+    });
   });
 }
 
@@ -4320,6 +4558,7 @@ function handlePlayerPopState() {
 async function openPlayer(embed, options = {}) {
   const embedSrc = normalizeEmbed(embed);
   const paneId = options.paneId || activePaneId;
+  const paneState = getPaneState(paneId);
   const paneStage = getPaneStage(paneId);
   const wasHidden = dom.player.hidden;
   const wasSwitcherOpen = dom.channelSwitcher.classList.contains("is-open");
@@ -4328,30 +4567,75 @@ async function openPlayer(embed, options = {}) {
     return;
   }
 
-  if (wasHidden) {
-    playSceneTransition("En vivo");
-  }
-
   rememberPlayerReturnFocus();
 
   if (paneId === PLAYER_PANES.PRIMARY && !options.keepSplit) {
     closeSecondaryPane({ silent: true });
   }
 
-  const frame = createEmbedFrame(embedSrc, options.title || extractIframeTitle(embed));
-  prepareEmbeds(frame);
+  cancelPaneAttempt(paneId);
+  if (!options.automaticFailover) {
+    paneState.attemptedSourceKeys.clear();
+  }
+  const frameTitle = cleanText(options.title || extractIframeTitle(embed) || "Transmisión en vivo");
+  if (!options.sourceKey) {
+    const directItem = {
+      sourceName: frameTitle,
+      sourceUrl: embedSrc,
+      sourceKey: embedSrc,
+      name: frameTitle,
+      language: "",
+      quality: "",
+      type: "Web",
+    };
+    paneState.item = directItem;
+    paneState.match = null;
+    paneState.playlist = [directItem];
+    paneState.playlistTitle = "Transmisión actual";
+  }
+  paneState.sourceKey = options.sourceKey || embedSrc;
+  paneState.currentEmbed = embedSrc;
+  paneState.currentTitle = frameTitle;
+  const generation = ++paneState.attemptGeneration;
+  const sceneContext = getPlayerSignalContext(paneId);
 
-  getPaneState(paneId).sourceKey = options.sourceKey || "";
-  const posterMatch = getPaneState(paneId).match;
-  const posterUrl = firstImageUrl(posterMatch?.matchThumb, posterMatch?.eventLogo, posterMatch?.leagueBadge);
-  const iosHint = isIosDevice() ? createIosPlaybackHint() : null;
-
-  if (iosHint) {
-    frame.addEventListener("load", () => iosHint.classList.add("is-ready"), { once: true });
+  if (wasHidden) {
+    playSceneTransition("En vivo", {
+      detail: sceneContext.title,
+      variant: "live",
+    });
   }
 
+  const frame = createEmbedFrame(embedSrc, frameTitle, { deferSrc: true });
+  frame.classList.add("player-frame");
+  prepareEmbeds(frame);
+
+  const posterMatch = paneState.match;
+  const posterUrl = firstImageUrl(posterMatch?.matchThumb, posterMatch?.eventLogo, posterMatch?.leagueBadge);
+  const iosHint = isIosDevice() ? createIosPlaybackHint() : null;
+  const signalOverlay = createPlayerSignalOverlay(paneId);
+
+  frame.addEventListener("load", () => {
+    if (generation !== paneState.attemptGeneration) return;
+    window.clearTimeout(paneState.attemptTimer);
+    paneState.attemptTimer = 0;
+    paneState.attemptedSourceKeys.clear();
+    setPlayerSignalState(paneId, "ready", sceneContext.title, "La fuente respondió correctamente");
+    frame.classList.add("is-ready");
+    if (iosHint) iosHint.classList.add("is-ready");
+    window.setTimeout(() => {
+      if (generation === paneState.attemptGeneration) signalOverlay.classList.add("is-hidden");
+    }, PLAYER_REVEAL_DELAY);
+  }, { once: true });
+  frame.addEventListener("error", () => handlePlayerSourceFailure(paneId, generation, "La fuente rechazó la conexión"), { once: true });
+  frame.src = embedSrc;
+
   paneStage.style.backgroundImage = posterUrl ? `url("${posterUrl}")` : "";
-  paneStage.replaceChildren(...[frame, iosHint].filter(Boolean));
+  paneStage.replaceChildren(...[frame, signalOverlay, iosHint].filter(Boolean));
+  paneState.attemptTimer = window.setTimeout(
+    () => handlePlayerSourceFailure(paneId, generation),
+    PLAYER_SOURCE_TIMEOUT
+  );
   if (posterMatch) {
     applyEventPalette(paneStage, posterMatch);
   }
@@ -4362,7 +4646,7 @@ async function openPlayer(embed, options = {}) {
 
   setActivePane(paneId, { silent: true });
   syncSplitMode();
-  updateActiveChannel(embedSrc, getPaneState(paneId).sourceKey, paneId);
+  updateActiveChannel(embedSrc, paneState.sourceKey, paneId);
   toggleChannelSwitcher(false);
   stopHighlightsPlayer();
   dom.setupPanel.hidden = true;
@@ -4397,10 +4681,10 @@ function openItem(item, options = {}) {
   const keepSplit = options.keepSplit ?? isSplitMode();
 
   if (Array.isArray(options.playlist)) {
-    paneState.playlist = options.playlist.filter((source) => source && source.sourceUrl);
+    paneState.playlist = dedupeSourceItems(options.playlist);
     paneState.playlistTitle = options.playlistTitle || paneState.playlistTitle || "Canales disponibles";
   } else if (!options.keepPlaylist) {
-    paneState.playlist = getPlayableItems();
+    paneState.playlist = dedupeSourceItems(getPlayableItems());
     paneState.playlistTitle = options.playlistTitle || "Biblioteca en vivo";
   }
 
@@ -4485,13 +4769,22 @@ async function closePlayer(options = {}) {
     }
   }
 
-  playSceneTransition("Inicio");
+  playSceneTransition(AGENDA_VIEWS[selectedAgendaView]?.label || "Inicio", {
+    detail: "Volviendo a la agenda",
+    variant: selectedAgendaView,
+  });
+  cancelPaneAttempt(PLAYER_PANES.PRIMARY);
+  cancelPaneAttempt(PLAYER_PANES.SECONDARY);
   toggleChannelSwitcher(false);
   dom.player.hidden = true;
   dom.setupPanel.hidden = false;
   renderAgenda();
   dom.playerStage.replaceChildren();
   dom.secondaryPlayerStage.replaceChildren();
+  delete dom.primaryPlayerPane.dataset.playerState;
+  delete dom.secondaryPlayerPane.dataset.playerState;
+  dom.primaryPlayerPane.removeAttribute("aria-busy");
+  dom.secondaryPlayerPane.removeAttribute("aria-busy");
   dom.playerStage.style.backgroundImage = "";
   dom.secondaryPlayerStage.style.backgroundImage = "";
   dom.secondaryPlayerPane.hidden = true;

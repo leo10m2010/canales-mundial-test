@@ -20,6 +20,7 @@ La agenda usa Netlify Functions para evitar CORS. Con `start-server.bat` la bibl
 - `styles.css`: interfaz, player y responsive.
 - `channels.js`: lista editable de respaldo. Por defecto esta vacia porque los canales vienen de StreamX-HD.
 - `script.js`: renderizado, cambio de canales y fullscreen.
+- `tests/`: smoke tests y referencias visuales Playwright para escritorio, móvil y TV.
 - `netlify/functions/worldcup-games.js`: proxy de marcador y resultados World Cup.
 - `netlify/functions/streamx-events.js`: proxy de agenda StreamX-HD.
 - `netlify/functions/streamx-channels.js`: proxy de canales 24/7 StreamX-HD.
@@ -68,6 +69,18 @@ El embed manual acepta URLs directas o iframes con `src`.
 - `ChannelUp`/`ChannelDown`: siguiente/anterior fuente cuando el control lo soporta.
 
 En modo TV, la navegacion usa foco espacial: las flechas saltan al boton visualmente mas cercano en esa direccion.
+
+## Pruebas
+
+```powershell
+npm install
+npx playwright install chromium
+npm test
+```
+
+Las pruebas no dependen de proveedores externos. Validan navegación, bumper,
+entrada branded al player, timeout, cambio automático de fuente y estado final de
+recuperación en 1440×900, móvil y TV 1920×1080.
 
 ## Instalacion como app TV
 

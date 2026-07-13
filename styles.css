@@ -280,8 +280,35 @@ body.is-scene-transitioning > .player > :not(.scene-transition) {
   opacity: 0;
 }
 
-.scene-transition.is-active .scene-transition__label {
+.scene-transition__detail {
+  min-height: 1.25em;
+  max-width: min(620px, calc(100vw - 48px));
+  color: rgba(255, 255, 255, 0.82);
+  font-size: clamp(0.8rem, 1.8vw, 1.05rem);
+  font-weight: 500;
+  line-height: 1.25;
+  text-align: center;
+  opacity: 0;
+  transform: translateY(5px);
+}
+
+.scene-transition.is-active .scene-transition__label,
+.scene-transition.is-active .scene-transition__detail {
   animation: scene-label-in 260ms ease-out 80ms both;
+}
+
+.scene-transition[data-variant="live"],
+.scene-transition[data-variant="switching"] {
+  background:
+    radial-gradient(ellipse at 50% 48%, rgba(255, 255, 255, 0.055), transparent 34%),
+    radial-gradient(ellipse at 50% 54%, rgba(153, 22, 33, 0.2), transparent 48%),
+    #050506;
+}
+
+.scene-transition[data-variant="results"] {
+  background:
+    radial-gradient(ellipse at 50% 48%, rgba(205, 210, 222, 0.1), transparent 38%),
+    #050506;
 }
 
 @keyframes scene-mark-in {
@@ -939,6 +966,12 @@ h1 {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.highlights-artwork {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
 }
 
 .highlights-thumb.is-empty {
@@ -2511,6 +2544,145 @@ textarea:focus {
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
+}
+
+.player-frame {
+  position: relative;
+  z-index: 3;
+  opacity: 0;
+  transition: opacity 240ms ease;
+}
+
+.player-frame.is-ready {
+  opacity: 1;
+}
+
+.player-signal {
+  position: absolute;
+  z-index: 4;
+  inset: 0;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 12px;
+  padding: clamp(28px, 6vw, 72px);
+  color: #f5f5f7;
+  background:
+    linear-gradient(90deg, rgba(5, 5, 6, 0.94), rgba(5, 5, 6, 0.68) 50%, rgba(5, 5, 6, 0.9)),
+    radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.07), transparent 42%);
+  text-align: center;
+  opacity: 1;
+  transition: opacity 220ms ease, visibility 220ms ease;
+  pointer-events: none;
+}
+
+.player-signal.is-hidden {
+  visibility: hidden;
+  opacity: 0;
+}
+
+.player-signal.is-failed {
+  pointer-events: auto;
+}
+
+.player-signal-identity {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.player-signal-monogram {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  color: #08080a;
+  background: linear-gradient(145deg, #ffffff, #a7a8ad);
+  border-radius: 12px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7), 0 10px 28px rgba(0, 0, 0, 0.35);
+  font-size: 0.86rem;
+  font-weight: 900;
+  letter-spacing: -0.08em;
+}
+
+.player-signal-kicker {
+  color: rgba(255, 255, 255, 0.58);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.player-signal-title {
+  max-width: 760px;
+  font-size: clamp(1.55rem, 4vw, 3.25rem);
+  font-weight: 800;
+  letter-spacing: -0.045em;
+  line-height: 1.05;
+}
+
+.player-signal-detail {
+  color: rgba(255, 255, 255, 0.64);
+  font-size: clamp(0.78rem, 1.7vw, 1rem);
+}
+
+.player-signal-progress {
+  position: relative;
+  width: min(280px, 60vw);
+  height: 2px;
+  margin-top: 10px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.player-signal-progress::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, #fff, transparent);
+  transform: translateX(-100%);
+  animation: player-signal-scan 1.1s ease-in-out infinite;
+}
+
+.player-signal.is-ready .player-signal-progress::after {
+  animation: none;
+  transform: none;
+  background: #fff;
+}
+
+.player-signal.is-failed .player-signal-progress {
+  display: none;
+}
+
+.player-signal-actions {
+  display: none;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.player-signal.is-failed .player-signal-actions {
+  display: flex;
+}
+
+.player-signal-action {
+  min-height: 48px;
+  padding: 0 20px;
+  color: #f5f5f7;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  font-weight: 700;
+}
+
+.player-signal-action.is-primary,
+.player-signal-action:focus-visible {
+  color: #09090b;
+  background: #f5f5f7;
+}
+
+@keyframes player-signal-scan {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
 }
 
 .ios-playback-hint {

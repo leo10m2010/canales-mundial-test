@@ -5,6 +5,17 @@
 [build.environment]
   NODE_VERSION = "20"
 
+[images]
+  remote_images = [
+    'https://r2\.thesportsdb\.com/.*',
+    'https://www\.thesportsdb\.com/.*',
+    'https://disney\.images\.edge\.bamgrid\.com/.*',
+    'https://a\.espncdn\.com/.*',
+    'https://static\.vecteezy\.com/.*',
+    'https://flagcdn\.com/.*',
+    'https://upload\.wikimedia\.org/.*'
+  ]
+
 [[headers]]
   for = "/*"
   [headers.values]
