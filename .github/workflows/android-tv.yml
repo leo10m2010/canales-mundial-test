@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: android-tv-${{ github.workflow }}-${{ github.ref }}
@@ -55,3 +55,34 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 30
+
+      - name: Prepare versioned APK
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        id: release
+        shell: bash
+        run: |
+          version="$(sed -n 's/^[[:space:]]*versionName "\([^"]*\)"/\1/p' app/build.gradle)"
+          test -n "$version"
+          apk="mundial-plus-android-tv-v${version}.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "$apk"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=android-tv-v$version" >> "$GITHUB_OUTPUT"
+          echo "apk=$apk" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub release
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.release.outputs.tag }}
+          VERSION: ${{ steps.release.outputs.version }}
+          APK: ${{ steps.release.outputs.apk }}
+        shell: bash
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$APK" --clobber
+          else
+            gh release create "$TAG" "$APK" \
+              --target "$GITHUB_SHA" \
+              --title "Mundial+ Android TV v$VERSION" \
+              --notes "APK instalable de Mundial+ para Android TV."
+          fi
