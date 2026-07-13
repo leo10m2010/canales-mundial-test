@@ -15,6 +15,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.webkit.CookieManager;
+import android.webkit.RenderProcessGoneDetail;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
 import android.webkit.WebResourceRequest;
@@ -24,6 +25,7 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.FrameLayout;
 import android.widget.Button;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
@@ -185,6 +187,14 @@ public class MainActivity extends Activity {
                     showError(getString(R.string.connection_error_message));
                 }
             }
+
+            @Override
+            public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+                if (destroyed) return false;
+                mainFrameFailed = true;
+                mainHandler.post(() -> recoverWebViewAfterRendererLoss(view));
+                return true;
+            }
         });
 
         view.setWebChromeClient(new WebChromeClient() {
@@ -334,6 +344,13 @@ public class MainActivity extends Activity {
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setGravity(Gravity.CENTER_HORIZONTAL);
 
+        ImageView mark = new ImageView(this);
+        mark.setImageResource(R.drawable.ic_launcher);
+        mark.setContentDescription(null);
+        LinearLayout.LayoutParams markParams = new LinearLayout.LayoutParams(dp(92), dp(92));
+        markParams.setMargins(0, 0, 0, dp(18));
+        panel.addView(mark, markParams);
+
         TextView brand = text(getString(R.string.loading_title), 54, Color.WHITE, true);
         TextView message = text(getString(R.string.loading_message), 18, Color.rgb(180, 180, 184), false);
         message.setPadding(0, dp(10), 0, dp(28));
@@ -384,12 +401,31 @@ public class MainActivity extends Activity {
     private void showError(String detail) {
         if (destroyed) return;
         mainHandler.removeCallbacks(loadTimeout);
+        if (webView != null) webView.stopLoading();
         toolbarNavigationActive = false;
         loadingView.setVisibility(View.GONE);
         webView.setVisibility(View.INVISIBLE);
         errorDetail.setText(detail);
         errorView.setVisibility(View.VISIBLE);
         retryButton.requestFocus();
+    }
+
+    private void recoverWebViewAfterRendererLoss(WebView failedView) {
+        if (destroyed || root == null || failedView != webView) return;
+        if (customView != null) hideCustomView();
+        root.removeView(failedView);
+        failedView.destroy();
+
+        webView = new WebView(this);
+        webView.setBackgroundColor(Color.BLACK);
+        webView.setVisibility(View.INVISIBLE);
+        webView.setFocusable(true);
+        webView.setFocusableInTouchMode(true);
+        configureWebView(webView);
+        root.addView(webView, 0, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
+        showError(getString(R.string.renderer_error_message));
     }
 
     private View createErrorView() {

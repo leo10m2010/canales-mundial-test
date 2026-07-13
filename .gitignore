@@ -2,6 +2,8 @@
 .bun/
 .cache/
 node_modules/
+playwright-report/
+test-results/
 *.log
 
 # Build outputs
@@ -14,6 +16,11 @@ android-tv/**/build/
 android-tv/local.properties
 android-tv/advancedFeatures.ini
 android-tv/.idea/
+android-tv/.signing/
+*.jks
+*.keystore
+*.p12
+signing-credentials.json
 
 # OS generated files
 .DS_Store
