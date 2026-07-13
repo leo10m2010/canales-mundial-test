@@ -2011,6 +2011,7 @@ function playSceneTransition(label) {
 
   window.clearTimeout(sceneTransitionTimer);
   window.clearTimeout(sceneTransitionCleanupTimer);
+  document.body.classList.add("is-scene-transitioning");
   const transitions = [
     [dom.sceneTransition, dom.sceneTransitionLabel],
     [dom.sceneTransitionPlayer, dom.sceneTransitionPlayerLabel],
@@ -2024,10 +2025,12 @@ function playSceneTransition(label) {
   });
 
   sceneTransitionTimer = window.setTimeout(() => {
+    document.body.classList.remove("is-scene-transitioning");
     transitions.forEach(([transition]) => transition.classList.add("is-leaving"));
   }, SCENE_TRANSITION_HOLD_MS);
 
   sceneTransitionCleanupTimer = window.setTimeout(() => {
+    document.body.classList.remove("is-scene-transitioning");
     transitions.forEach(([transition]) => transition.classList.remove("is-active", "is-leaving"));
   }, SCENE_TRANSITION_END_MS);
 }

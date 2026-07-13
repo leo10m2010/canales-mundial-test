@@ -209,6 +209,11 @@ textarea:focus-visible {
   transition: opacity 130ms cubic-bezier(0.4, 0, 1, 1);
 }
 
+body.is-scene-transitioning > .home,
+body.is-scene-transitioning > .player > :not(.scene-transition) {
+  visibility: hidden;
+}
+
 .scene-transition__mark {
   position: relative;
   display: grid;
@@ -244,7 +249,6 @@ textarea:focus-visible {
     );
   background-clip: text;
   -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
   font-size: clamp(3rem, 8vw, 7.4rem);
   font-weight: 800;
   letter-spacing: -0.065em;
@@ -257,13 +261,8 @@ textarea:focus-visible {
   content: attr(data-brand);
   position: absolute;
   inset: 0;
-  color: transparent;
-  background: linear-gradient(102deg, transparent 40%, rgba(255, 255, 255, 0.98) 49%, transparent 58%);
-  background-size: 240% 100%;
-  background-position: 130% 50%;
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  color: rgba(255, 255, 255, 0.98);
+  clip-path: polygon(-24% 0, -12% 0, -2% 100%, -14% 100%);
 }
 
 .scene-transition.is-active .scene-transition__logo::after {
@@ -291,8 +290,8 @@ textarea:focus-visible {
 }
 
 @keyframes scene-logo-specular {
-  from { background-position: 130% 50%; }
-  to { background-position: -30% 50%; }
+  from { clip-path: polygon(-24% 0, -12% 0, -2% 100%, -14% 100%); }
+  to { clip-path: polygon(102% 0, 114% 0, 124% 100%, 112% 100%); }
 }
 
 @keyframes scene-label-in {
